@@ -1,0 +1,2880 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <!-- Configuração de viewport responsiva e codificação UTF-8 -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acerto de Viagem — Gestão de Frete, Motorista e Despesas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+      -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
+    }
+
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type="number"] {
+      -moz-appearance: textfield;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+
+    .input-field {
+      width: 100%;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #0f172a;
+      transition: all 0.15s ease;
+    }
+
+    .input-field:focus {
+      outline: none;
+      background: #ffffff;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      color: #ffffff;
+      font-weight: 600;
+      border-radius: 10px;
+      transition: transform 0.1s ease, box-shadow 0.15s ease, filter 0.15s ease;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+    }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-primary:active { transform: scale(0.98); }
+
+    .btn-secondary {
+      background: #ffffff;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+      font-weight: 600;
+      border-radius: 10px;
+      transition: all 0.15s ease;
+    }
+    .btn-secondary:hover { background: #f8fafc; border-color: #94a3b8; }
+    .btn-secondary:active { transform: scale(0.98); }
+
+    .btn-success {
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      color: #ffffff;
+      font-weight: 600;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(5, 150, 105, 0.22);
+      transition: transform 0.1s ease, filter 0.15s ease;
+    }
+    .btn-success:hover { filter: brightness(1.05); }
+    .btn-success:active { transform: scale(0.98); }
+
+    .btn-danger-ghost {
+      color: #dc2626;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+    }
+    .btn-danger-ghost:hover { background: #fee2e2; }
+
+    /* Barra superior retrátil ao rolar a tela para baixo */
+    #topHeader.is-compact {
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.22);
+    }
+    #topHeader.is-compact .header-inner {
+      padding-top: 0.35rem;
+      padding-bottom: 0.35rem;
+    }
+    #topHeader.is-compact .header-subtitle {
+      display: none;
+    }
+    #topHeader.is-compact .header-badge {
+      width: 1.8rem;
+      height: 1.8rem;
+      font-size: 0.7rem;
+      border-radius: 0.55rem;
+    }
+    #topHeader.is-compact .header-title {
+      font-size: 0.86rem;
+    }
+    #topHeader.is-compact .header-btn {
+      padding-top: 0.3rem;
+      padding-bottom: 0.3rem;
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+      font-size: 0.68rem;
+    }
+
+    .toast-enter {
+      animation: toastIn 0.22s ease-out forwards;
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Na impressão ou exportação para PDF, todas as seções expandem automaticamente */
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #ffffff !important; padding-bottom: 0 !important; }
+      .section-body { display: block !important; }
+      .section-compact-summary { display: none !important; }
+      .card {
+        box-shadow: none !important;
+        border: 1px solid #cbd5e1 !important;
+        break-inside: avoid;
+      }
+      .lg\:sticky { position: static !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-24 sm:pb-12">
+
+  <!-- Notificações flutuantes não bloqueantes -->
+  <div id="toastContainer" class="fixed bottom-20 sm:bottom-6 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Cabeçalho superior retrátil ao rolar e expansível ao subir ou clicar/tocar -->
+  <header id="topHeader" onclick="handleHeaderTap(event)" class="no-print sticky top-0 z-30 bg-slate-900/95 backdrop-blur text-white border-b border-slate-800 transition-all duration-200 cursor-pointer">
+    <div class="header-inner max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2 transition-all duration-200">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="header-badge w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center font-extrabold text-sm shadow-inner shrink-0 transition-all duration-200">
+          AV
+        </div>
+        <div class="truncate">
+          <h1 class="header-title text-base sm:text-lg font-bold tracking-tight leading-tight truncate transition-all duration-200">
+            Acerto de Viagem
+          </h1>
+          <p class="header-subtitle text-[11px] text-slate-400 truncate">
+            Faturamento • Comissão • Diárias • Abastecimentos • Despesas • Vales
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap" onclick="event.stopPropagation()">
+        <button type="button" onclick="openHistoryModal()" class="header-btn px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition">
+          <span>📁</span>
+          <span>Acertos</span>
+          <span id="historyCountBadge" class="px-1.5 py-0.5 rounded-full bg-blue-600 text-[10px] font-bold">0</span>
+        </button>
+
+        <button type="button" onclick="saveCurrentSettlement()" class="header-btn px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm">
+          <span>💾</span>
+          <span>Salvar</span>
+        </button>
+
+        <button type="button" onclick="exportToExcel()" class="header-btn px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold flex items-center gap-1 border border-slate-700 transition" title="Exportar Excel (.xlsx)">
+          <span>📊</span>
+          <span class="hidden sm:inline">Excel</span>
+        </button>
+
+        <button type="button" onclick="window.print()" class="header-btn px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold flex items-center gap-1 border border-slate-700 transition" title="Imprimir ou Salvar PDF">
+          <span>🖨️</span>
+          <span class="hidden sm:inline">PDF</span>
+        </button>
+
+        <button type="button" onclick="clearFormNewSettlement()" class="header-btn px-2.5 py-2 rounded-lg bg-rose-950/70 hover:bg-rose-900 text-rose-200 text-xs font-semibold flex items-center gap-1 border border-rose-800/60 transition" title="Novo Acerto Limpo">
+          <span>✨</span>
+          <span class="hidden md:inline">Novo</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-3 sm:px-6 pt-4 sm:pt-6">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+      <!-- Coluna principal -->
+      <div class="lg:col-span-7 space-y-4">
+
+        <!-- 1. Identificação do Conjunto (inicia aberta por padrão) -->
+        <section id="sec-conjunto" data-section-id="conjunto" onfocusin="focusSection('conjunto')" class="card p-4 sm:p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+              <button type="button" onclick="toggleSectionManual('conjunto')" class="flex items-center gap-2 text-left group">
+                <span class="w-6 h-6 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-extrabold shrink-0">1</span>
+                <h2 class="text-sm sm:text-base font-bold text-slate-800 group-hover:text-blue-700 transition">
+                  Identificação do Conjunto
+                </h2>
+              </button>
+
+              <div class="inline-flex items-center gap-1 bg-slate-100 border border-slate-300 rounded-lg px-2 py-1 focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/15 transition">
+                <label for="tripCodeInput" class="text-[11px] font-bold text-slate-500 uppercase select-none cursor-pointer">
+                  Cód:
+                </label>
+                <input
+                  id="tripCodeInput"
+                  type="text"
+                  maxlength="24"
+                  oninput="handleTripCodeInput(this.value)"
+                  placeholder="SEMPLACA-251126"
+                  title="Código editável do acerto"
+                  class="bg-transparent text-xs sm:text-sm font-mono font-bold text-blue-900 focus:outline-none w-28 sm:w-36 uppercase"
+                />
+                <button
+                  type="button"
+                  onclick="copyTripCode()"
+                  class="px-1.5 py-0.5 rounded bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 text-[11px] font-semibold transition"
+                  title="Copiar código"
+                >
+                  Copiar
+                </button>
+                <button
+                  type="button"
+                  onclick="regenerateTripCode()"
+                  class="px-1.5 py-0.5 rounded bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-semibold transition"
+                  title="Gerar novo código com a data atual (DDMMAA)"
+                >
+                  ↻
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span id="compact-conjunto" class="section-compact-summary hidden text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded-md"></span>
+              <button
+                type="button"
+                onclick="clearConjuntoSection()"
+                class="no-print px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 hover:border-rose-200 transition"
+                title="Limpar apenas os dados desta seção"
+              >
+                🧹 Limpar
+              </button>
+              <button
+                type="button"
+                onclick="toggleSectionManual('conjunto')"
+                id="toggle-btn-conjunto"
+                class="no-print w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center transition"
+                title="Minimizar ou expandir seção"
+              >
+                −
+              </button>
+            </div>
+          </div>
+
+          <div id="body-conjunto" class="section-body mt-3.5">
+            <div id="duplicateCodeAlert" class="hidden mb-3 p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-medium flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span>⚠️</span>
+                <span id="duplicateCodeMessage">Este código já pertence a um acerto salvo.</span>
+              </div>
+              <button type="button" onclick="openDuplicateInHistory()" class="underline font-bold text-amber-800 hover:text-amber-950 shrink-0">
+                Ver salvo
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Motorista</label>
+                <input id="driverName" type="text" list="registeredDriversList" oninput="handleDriverNameInput(this.value)" placeholder="Ex: Elias" class="input-field" autocomplete="off" />
+                <datalist id="registeredDriversList"></datalist>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Placa Cavalo</label>
+                <input id="truckPlate" type="text" maxlength="8" oninput="handlePlateInput('truckPlate', this.value)" placeholder="Ex: RQT2F07" class="input-field uppercase font-mono" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Placa Carreta</label>
+                <input id="trailerPlate" type="text" maxlength="8" oninput="handlePlateInput('trailerPlate', this.value)" placeholder="Ex: ABC1D23" class="input-field uppercase font-mono" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. Faturamento da Viagem (Cargas) -->
+        <section id="sec-freights" data-section-id="freights" onclick="handleSectionClick('freights', event)" onfocusin="focusSection('freights')" class="card p-4 sm:p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <button type="button" onclick="focusSection('freights')" class="flex items-center gap-2 text-left group min-w-0">
+              <span class="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-extrabold shrink-0">2</span>
+              <h2 class="text-sm sm:text-base font-bold text-slate-800 group-hover:text-emerald-700 transition truncate">
+                Faturamento da Viagem (Cargas)
+              </h2>
+            </button>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span id="compact-freights" class="section-compact-summary text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
+                0,00 t • R$ 0,00
+              </span>
+              <button type="button" onclick="focusAndRun('freights', addFreight)" class="no-print btn-secondary px-2.5 py-1.5 text-xs flex items-center gap-1">
+                <span>+</span>
+                <span>Carga</span>
+              </button>
+              <button type="button" onclick="toggleSectionManual('freights')" id="toggle-btn-freights" class="no-print w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center transition">
+                +
+              </button>
+            </div>
+          </div>
+
+          <div id="body-freights" class="section-body mt-3.5 hidden">
+            <div id="freightsList" class="space-y-3"></div>
+
+            <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
+              <span class="text-slate-500 font-medium">Peso Total: <strong id="totalWeightDisplay" class="text-slate-800">0,00 t</strong></span>
+              <span class="text-slate-500 font-medium">Faturamento Bruto: <strong id="totalFreightDisplay" class="text-emerald-700 font-bold text-base">R$ 0,00</strong></span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. Comissão e Diárias do Motorista -->
+        <section id="sec-commission" data-section-id="commission" onclick="handleSectionClick('commission', event)" onfocusin="focusSection('commission')" class="card p-4 sm:p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <button type="button" onclick="focusSection('commission')" class="flex items-center gap-2 text-left group min-w-0">
+              <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-extrabold shrink-0">3</span>
+              <h2 class="text-sm sm:text-base font-bold text-slate-800 group-hover:text-indigo-700 transition truncate">
+                Comissão e Diárias do Motorista
+              </h2>
+            </button>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span id="compact-commission" class="section-compact-summary text-[11px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded-md">
+                0 dia(s) • R$ 0,00
+              </span>
+              <button type="button" onclick="toggleSectionManual('commission')" id="toggle-btn-commission" class="no-print w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center transition">
+                +
+              </button>
+            </div>
+          </div>
+
+          <div id="body-commission" class="section-body mt-3.5 hidden">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Comissão (% sobre Faturamento)</label>
+                <div class="relative">
+                  <input id="commissionPct" type="number" step="0.1" min="0" oninput="onFieldChange()" class="input-field pr-8 font-bold" />
+                  <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                </div>
+                <div class="mt-2 flex items-center justify-between text-xs">
+                  <span class="text-slate-500">Valor da Comissão:</span>
+                  <strong id="commissionValueDisplay" class="text-indigo-700 font-bold">R$ 0,00</strong>
+                </div>
+              </div>
+
+              <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Valor da Diária (R$/dia)</label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">R$</span>
+                  <input id="dailyRate" type="text" inputmode="decimal" oninput="onFieldChange()" class="input-field pl-9 font-bold" />
+                </div>
+                <div class="mt-2 flex items-center justify-between text-xs">
+                  <span class="text-slate-500">Total de Diárias:</span>
+                  <strong id="dailyTotalDisplay" class="text-indigo-700 font-bold">R$ 0,00</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-indigo-50/60 border border-indigo-100 space-y-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs font-bold text-indigo-950 uppercase tracking-wide">Período das Diárias</span>
+                <span id="dailyPeriodSummary" class="text-xs font-semibold text-indigo-700 bg-white px-2.5 py-1 rounded-full border border-indigo-200">
+                  0 dia(s)
+                </span>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[11px] font-semibold text-slate-600 mb-1">Início (1ª Carga)</label>
+                  <input id="dailyStartDate" type="date" onchange="onDailyDatesManualChange()" class="input-field bg-white" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-semibold text-slate-600 mb-1">Fim (Última Carga)</label>
+                  <input id="dailyEndDate" type="date" onchange="onDailyDatesManualChange()" class="input-field bg-white" />
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <label class="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                  <input id="includeLoadingDay" type="checkbox" onchange="onFieldChange()" class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500" />
+                  <span>Somar dia de carregamento</span>
+                </label>
+
+                <button type="button" onclick="syncDailyDatesFromFreights(true)" class="text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline">
+                  Sincronizar datas das cargas
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. Abastecimentos (KM Inicial único no topo + KM por abastecimento + Diesel e Arla 32 empilhados) -->
+        <section id="sec-fuelings" data-section-id="fuelings" onclick="handleSectionClick('fuelings', event)" onfocusin="focusSection('fuelings')" class="card p-4 sm:p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <button type="button" onclick="focusSection('fuelings')" class="flex items-center gap-2 text-left group min-w-0">
+              <span class="w-6 h-6 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center text-xs font-extrabold shrink-0">4</span>
+              <h2 class="text-sm sm:text-base font-bold text-slate-800 group-hover:text-sky-700 transition truncate">
+                Abastecimentos (Diesel e Arla 32)
+              </h2>
+            </button>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span id="compact-fuelings" class="section-compact-summary text-[11px] font-bold text-sky-900 bg-sky-50 border border-sky-200 px-2 py-1 rounded-md">
+                0,0 L • R$ 0,00
+              </span>
+              <button type="button" onclick="focusAndRun('fuelings', addFueling)" class="no-print btn-secondary px-2.5 py-1.5 text-xs flex items-center gap-1">
+                <span>⛽</span>
+                <span>+ Abast.</span>
+              </button>
+              <button type="button" onclick="toggleSectionManual('fuelings')" id="toggle-btn-fuelings" class="no-print w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center transition">
+                +
+              </button>
+            </div>
+          </div>
+
+          <div id="body-fuelings" class="section-body mt-3.5 hidden">
+            <!-- Parâmetro único de KM Inicial da viagem no topo da relação -->
+            <div class="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200/90 mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5 flex-wrap">
+                <label for="tripStartKmInput" class="text-xs font-extrabold text-indigo-950 shrink-0">
+                  KM Inicial da Viagem:
+                </label>
+                <input
+                  id="tripStartKmInput"
+                  type="text"
+                  inputmode="decimal"
+                  oninput="handleTripStartKmInput(this.value)"
+                  placeholder="Ex: 125000"
+                  class="bg-white border border-indigo-300 rounded-lg px-3 py-1.5 text-xs sm:text-sm font-bold text-indigo-950 w-36 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+                <span class="text-[11px] text-indigo-700 font-medium">
+                  Parâmetro inicial usado no 1º abastecimento
+                </span>
+              </div>
+
+              <div id="tripKmSpanBadge" class="text-xs font-extrabold text-indigo-900 bg-white border border-indigo-200 px-2.5 py-1 rounded-lg">
+                Rodados: 0 km
+              </div>
+            </div>
+
+            <!-- Lista de abastecimentos -->
+            <div id="fuelingsList" class="space-y-3"></div>
+
+            <!-- Consolidado final de Diesel e Arla 32 -->
+            <div class="mt-4 pt-3.5 border-t border-slate-200 space-y-2.5 text-xs">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <!-- Consolidado Diesel -->
+                <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/90 space-y-1">
+                  <div class="flex items-center justify-between">
+                    <span class="font-extrabold text-slate-800">⛽ Consolidado Diesel</span>
+                    <span id="dieselGeneralKmPerLiter" class="font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                      — km/L
+                    </span>
+                  </div>
+                  <div class="text-slate-600">
+                    KM Rodados: <strong id="dieselTotalKmDriven" class="text-slate-900">0 km</strong> • Litros Gastos: <strong id="dieselTotalLitersOut" class="text-slate-900">0,0 L</strong>
+                  </div>
+                  <div class="text-slate-600">
+                    Total Diesel: <strong id="dieselTotalValueOut" class="text-slate-900">R$ 0,00</strong> (Média: <strong id="dieselAvgUnitOut" class="text-blue-700">R$ 0,00/L</strong>)
+                  </div>
+                </div>
+
+                <!-- Consolidado Arla 32 -->
+                <div class="p-3 rounded-xl bg-cyan-50/60 border border-cyan-200/90 space-y-1">
+                  <div class="flex items-center justify-between">
+                    <span class="font-extrabold text-cyan-950">💧 Consolidado Arla 32</span>
+                    <span id="arlaGeneralKmPerLiter" class="font-extrabold text-cyan-900 bg-white border border-cyan-200 px-2 py-0.5 rounded-md">
+                      — km/L
+                    </span>
+                  </div>
+                  <div class="text-cyan-900">
+                    KM Rodados: <strong id="arlaTotalKmDriven" class="text-cyan-950">0 km</strong> • Litros Gastos: <strong id="arlaTotalLitersOut" class="text-cyan-950">0,0 L</strong>
+                  </div>
+                  <div class="text-cyan-900">
+                    Total Arla 32: <strong id="arlaTotalValueOut" class="text-cyan-950">R$ 0,00</strong> (Média: <strong id="arlaAvgUnitOut" class="text-cyan-900">R$ 0,00/L</strong>)
+                  </div>
+                </div>
+              </div>
+
+              <div class="p-2.5 rounded-xl bg-sky-50 border border-sky-200/90 flex flex-wrap items-center justify-between gap-2">
+                <span class="font-bold text-sky-950">Total Geral Abastecimentos (Diesel + Arla 32): <strong id="totalFuelingsDisplay" class="text-sm font-extrabold">R$ 0,00</strong></span>
+                <span class="text-slate-700">
+                  Pagos p/ Motorista: <strong id="driverFuelingsDisplay" class="text-slate-900">R$ 0,00</strong> • Pagos p/ Empresa: <strong id="companyFuelingsDisplay" class="text-slate-900">R$ 0,00</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. Despesas de Viagem -->
+        <section id="sec-expenses" data-section-id="expenses" onclick="handleSectionClick('expenses', event)" onfocusin="focusSection('expenses')" class="card p-4 sm:p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <button type="button" onclick="focusSection('expenses')" class="flex items-center gap-2 text-left group min-w-0">
+              <span class="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-extrabold shrink-0">5</span>
+              <h2 class="text-sm sm:text-base font-bold text-slate-800 group-hover:text-amber-700 transition truncate">
+                Despesas de Viagem
+              </h2>
+            </button>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span id="compact-expenses" class="section-compact-summary text-[11px] font-bold text-amber-900 bg-amber-50 border border-amber-200 px-2 py-1 rounded-md">
+                R$ 0,00
+              </span>
+              <button type="button" onclick="focusAndRun('expenses', addExpense)" class="no-print btn-secondary px-2.5 py-1.5 text-xs flex items-center gap-1">
+                <span>+</span>
+                <span>Despesa</span>
+              </button>
+              <button type="button" onclick="toggleSectionManual('expenses')" id="toggle-btn-expenses" class="no-print w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center transition">
+                +
+              </button>
+            </div>
+          </div>
+
+          <div id="body-expenses" class="section-body mt-3.5 hidden">
+            <p class="text-[11px] text-slate-500 mb-3">
+              Escolha quem pagou: <strong>Motorista</strong> entra no reembolso dele; <strong>Empresa</strong> abate no resultado operacional.
+            </p>
+
+            <div id="expensesList" class="space-y-2.5"></div>
+
+            <div class="mt-3.5 pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div class="p-2 rounded-lg bg-slate-50 flex items-center justify-between">
+                <span class="text-slate-500">Pago p/ Motorista:</span>
+                <strong id="driverExpensesDisplay" class="text-slate-800">R$ 0,00</strong>
+              </div>
+              <div class="p-2 rounded-lg bg-slate-50 flex items-center justify-between">
+                <span class="text-slate-500">Pago p/ Empresa:</span>
+                <strong id="companyExpensesDisplay" class="text-slate-800">R$ 0,00</strong>
+              </div>
+              <div class="p-2 rounded-lg bg-amber-50/70 flex items-center justify-between">
+                <span class="text-amber-800 font-medium">Total Despesas:</span>
+                <strong id="totalExpensesDisplay" class="text-amber-900 font-bold">R$ 0,00</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. Adiantamentos / Vales ao Motorista -->
+        <section id="sec-advances" data-section-id="advances" onclick="handleSectionClick('advances', event)" onfocusin="focusSection('advances')" class="card p-4 sm:p-5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <button type="button" onclick="focusSection('advances')" class="flex items-center gap-2 text-left group min-w-0">
+              <span class="w-6 h-6 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center text-xs font-extrabold shrink-0">6</span>
+              <h2 class="text-sm sm:text-base font-bold text-slate-800 group-hover:text-rose-700 transition truncate">
+                Adiantamentos / Vales ao Motorista
+              </h2>
+            </button>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span id="compact-advances" class="section-compact-summary text-[11px] font-bold text-rose-800 bg-rose-50 border border-rose-200 px-2 py-1 rounded-md">
+                R$ 0,00
+              </span>
+              <button type="button" onclick="focusAndRun('advances', addAdvance)" class="no-print btn-secondary px-2.5 py-1.5 text-xs flex items-center gap-1">
+                <span>+</span>
+                <span>Vale</span>
+              </button>
+              <button type="button" onclick="toggleSectionManual('advances')" id="toggle-btn-advances" class="no-print w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center transition">
+                +
+              </button>
+            </div>
+          </div>
+
+          <div id="body-advances" class="section-body mt-3.5 hidden">
+            <div id="advancesList" class="space-y-2.5"></div>
+
+            <div class="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between text-xs sm:text-sm">
+              <span class="text-slate-500 font-medium">Total de Vales / Adiantamentos</span>
+              <strong id="totalAdvancesDisplay" class="text-rose-600 font-bold text-base">R$ 0,00</strong>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- Coluna lateral: Resumo do Acerto e Texto para WhatsApp -->
+      <div class="lg:col-span-5 space-y-4 lg:sticky lg:top-16">
+
+        <!-- Resumo do Acerto -->
+        <section id="sec-summary" data-section-id="summary" onclick="handleSectionClick('summary', event)" onfocusin="focusSection('summary')" class="card p-4 sm:p-5 border-2 border-blue-600/20">
+          <div class="flex items-center justify-between gap-2">
+            <button type="button" onclick="focusSection('summary')" class="flex items-center gap-2 text-left min-w-0">
+              <h2 class="text-base font-extrabold text-slate-900 truncate">Resumo do Acerto</h2>
+              <span id="summaryCodeBadge" class="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                SEMPLACA-251126
+              </span>
+            </button>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span id="compact-summary" class="section-compact-summary text-[11px] font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-md">
+                R$ 0,00
+              </span>
+              <button type="button" onclick="toggleSectionManual('summary')" id="toggle-btn-summary" class="no-print w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center transition">
+                +
+              </button>
+            </div>
+          </div>
+
+          <div id="body-summary" class="section-body mt-3.5 hidden">
+            <div class="p-3.5 rounded-xl bg-slate-900 text-white mb-4">
+              <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+                <span>Faturamento Bruto da Viagem</span>
+                <span id="summaryDriverLabel" class="text-slate-300 font-medium">Motorista: —</span>
+              </div>
+              <div id="summaryGrossFreight" class="text-2xl font-extrabold tracking-tight text-emerald-400">
+                R$ 0,00
+              </div>
+            </div>
+
+            <div class="space-y-2 text-xs sm:text-sm">
+              <div class="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span class="text-slate-600">Comissão do Motorista</span>
+                <span id="summaryCommission" class="font-semibold text-slate-800">R$ 0,00</span>
+              </div>
+              <div class="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span class="text-slate-600">Diárias (<span id="summaryDaysCount">0</span> dias)</span>
+                <span id="summaryDaily" class="font-semibold text-slate-800">R$ 0,00</span>
+              </div>
+              <div class="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span class="text-slate-600 font-medium">Total Ganho Motorista (Comissão + Diárias)</span>
+                <span id="summaryDriverGross" class="font-bold text-indigo-700">R$ 0,00</span>
+              </div>
+              <div class="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span class="text-slate-600">(+) Despesas Pagas pelo Motorista</span>
+                <span id="summaryDriverExpenses" class="font-semibold text-emerald-700">+ R$ 0,00</span>
+              </div>
+              <div class="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span class="text-slate-600">(+) Abastecimentos Pagos pelo Motorista</span>
+                <span id="summaryDriverFuelings" class="font-semibold text-emerald-700">+ R$ 0,00</span>
+              </div>
+              <div class="flex items-center justify-between py-1.5 border-b border-slate-100">
+                <span class="text-slate-600">(-) Adiantamentos / Vales</span>
+                <span id="summaryAdvances" class="font-semibold text-rose-600">- R$ 0,00</span>
+              </div>
+            </div>
+
+            <div id="driverBalanceBox" class="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+              <div class="flex items-center justify-between">
+                <span id="driverBalanceLabel" class="text-xs font-bold uppercase tracking-wider text-emerald-900">
+                  Saldo a Pagar ao Motorista
+                </span>
+                <span id="driverBalanceStatus" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900">
+                  A Receber
+                </span>
+              </div>
+              <div id="summaryDriverBalance" class="text-2xl font-extrabold text-emerald-800 mt-1">
+                R$ 0,00
+              </div>
+            </div>
+
+            <div class="mt-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
+              <div class="flex items-center justify-between text-xs text-slate-500">
+                <span>Média Geral Diesel</span>
+                <strong id="summaryDieselAvgKmL" class="text-blue-700">— km/L</strong>
+              </div>
+              <div class="flex items-center justify-between text-xs text-slate-500">
+                <span>Média Geral Arla 32</span>
+                <strong id="summaryArlaAvgKmL" class="text-cyan-800">— km/L</strong>
+              </div>
+              <div class="flex items-center justify-between text-xs text-slate-500">
+                <span>Total Abastecimentos (Diesel + Arla 32)</span>
+                <strong id="summaryTotalFuelings" class="text-slate-700">R$ 0,00</strong>
+              </div>
+              <div class="flex items-center justify-between text-xs text-slate-500">
+                <span>Total Despesas de Viagem</span>
+                <strong id="summaryTotalExpenses" class="text-slate-700">R$ 0,00</strong>
+              </div>
+              <div class="pt-1.5 border-t border-slate-200 flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-700">Resultado Operacional Líquido</span>
+                <span id="summaryOpProfit" class="text-lg font-extrabold text-slate-900">R$ 0,00</span>
+              </div>
+            </div>
+
+            <div class="no-print mt-4 grid grid-cols-2 gap-2.5">
+              <button type="button" onclick="saveCurrentSettlement()" class="btn-success py-2.5 px-3 text-xs sm:text-sm flex items-center justify-center gap-1.5">
+                <span>💾</span>
+                <span>Salvar Acerto</span>
+              </button>
+              <button type="button" onclick="copyReceiptText()" class="btn-secondary py-2.5 px-3 text-xs sm:text-sm flex items-center justify-center gap-1.5">
+                <span>📋</span>
+                <span>Copiar Resumo</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Texto para WhatsApp / Recibo -->
+        <section id="sec-whatsapp" data-section-id="whatsapp" onclick="handleSectionClick('whatsapp', event)" onfocusin="focusSection('whatsapp')" class="card p-4 sm:p-5">
+          <div class="flex items-center justify-between gap-2">
+            <button type="button" onclick="focusSection('whatsapp')" class="text-left min-w-0">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-600 truncate">
+                Texto para WhatsApp / Recibo
+              </h3>
+            </button>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span id="compact-whatsapp" class="section-compact-summary text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
+                Pronto p/ copiar
+              </span>
+              <button type="button" onclick="copyReceiptText()" class="no-print text-xs font-semibold text-blue-600 hover:text-blue-800 px-1.5 py-1">
+                Copiar
+              </button>
+              <button type="button" onclick="toggleSectionManual('whatsapp')" id="toggle-btn-whatsapp" class="no-print w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center transition">
+                +
+              </button>
+            </div>
+          </div>
+
+          <div id="body-whatsapp" class="section-body mt-3 hidden">
+            <pre id="receiptPreview" class="text-[11px] sm:text-xs leading-relaxed bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 whitespace-pre-wrap font-mono max-h-72 overflow-y-auto"></pre>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal de Acertos Salvos (Firebase Firestore + Cache Local) -->
+  <div id="historyModal" class="no-print fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-3 sm:p-6">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+      <div class="px-4 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+        <div>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900">Acertos Salvos</h3>
+          <p class="text-xs text-slate-500">Clique em abrir para carregar ou excluir um registro salvo.</p>
+        </div>
+        <button type="button" onclick="closeHistoryModal()" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center">
+          ✕
+        </button>
+      </div>
+
+      <div id="historyListContainer" class="p-4 sm:p-6 overflow-y-auto space-y-3 flex-1"></div>
+
+      <div class="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+        <span id="historyFooterInfo" class="text-xs text-slate-500">0 registro(s)</span>
+        <button type="button" onclick="closeHistoryModal()" class="btn-primary px-4 py-2 text-xs">
+          Fechar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SECTION_IDS = ['conjunto', 'freights', 'commission', 'fuelings', 'expenses', 'advances', 'summary', 'whatsapp'];
+
+    // Apenas a seção 1 ('conjunto') começa aberta; as demais iniciam minimizadas
+    let sectionOpenMap = {
+      conjunto: true,
+      freights: false,
+      commission: false,
+      fuelings: false,
+      expenses: false,
+      advances: false,
+      summary: false,
+      whatsapp: false
+    };
+
+    // =========================================================================
+    // INTEGRAÇÃO FIREBASE FIRESTORE (COLEÇÃO: acertos_viagem)
+    // Basta colar o objeto FIREBASE_CONFIG do seu projeto no Firebase Console.
+    // Se ainda não colou a config, o app funciona normalmente via cache local.
+    // =========================================================================
+    const FIREBASE_CONFIG = {
+      apiKey: "",
+      authDomain: "",
+      projectId: "",
+      storageBucket: "",
+      messagingSenderId: "",
+      appId: ""
+    };
+
+    const FIRESTORE_COLLECTION = "acertos_viagem";
+    const LOCAL_BACKUP_KEY = "acerto_viagem_firestore_cache_v1";
+
+    let db = null;
+    let firestoreReady = false;
+    let savedHistory = [];
+
+    function isFirebaseConfigFilled() {
+      return Boolean(
+        FIREBASE_CONFIG &&
+        typeof FIREBASE_CONFIG.projectId === "string" &&
+        FIREBASE_CONFIG.projectId.trim().length > 0 &&
+        typeof FIREBASE_CONFIG.apiKey === "string" &&
+        FIREBASE_CONFIG.apiKey.trim().length > 0
+      );
+    }
+
+    function readLocalCache() {
+      try {
+        const raw = localStorage.getItem(LOCAL_BACKUP_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function writeLocalCache(list) {
+      try {
+        localStorage.setItem(LOCAL_BACKUP_KEY, JSON.stringify(Array.isArray(list) ? list : []));
+      } catch (e) {}
+    }
+
+    function sanitizeDocId(code) {
+      const clean = String(code || "").toUpperCase().trim().replace(/[^A-Z0-9_-]/g, "_");
+      return clean || ("ACERTO_" + getTodayDDMMAA());
+    }
+
+    function setCloudStatusIndicator(statusText, tone = "neutral") {
+      let badge = document.getElementById("firestoreStatusBadge");
+      if (!badge) {
+        const headerBtns = document.querySelector("#topHeader .flex.items-center.gap-1\\.5");
+        if (headerBtns) {
+          badge = document.createElement("span");
+          badge.id = "firestoreStatusBadge";
+          badge.className = "header-btn px-2 py-1.5 rounded-lg text-[11px] font-bold border hidden sm:inline-flex items-center gap-1 select-none";
+          headerBtns.insertBefore(badge, headerBtns.firstChild);
+        }
+      }
+      if (!badge) return;
+
+      const styles = {
+        ok: "bg-emerald-950/80 text-emerald-300 border-emerald-700/70",
+        warn: "bg-amber-950/80 text-amber-300 border-amber-700/70",
+        neutral: "bg-slate-800 text-slate-300 border-slate-700"
+      };
+      badge.className = `header-btn px-2 py-1.5 rounded-lg text-[11px] font-bold border hidden sm:inline-flex items-center gap-1 select-none ${styles[tone] || styles.neutral}`;
+      badge.textContent = statusText;
+    }
+
+    async function initFirebaseFirestore() {
+      savedHistory = readLocalCache();
+      updateHistoryBadge();
+      refreshRegisteredDriversDatalist();
+      checkDuplicateTripCode();
+
+      if (!isFirebaseConfigFilled()) {
+        firestoreReady = false;
+        setCloudStatusIndicator("☁️ Config pendente", "warn");
+        return;
+      }
+
+      try {
+        if (!window.firebase || !window.firebase.firestore) {
+          throw new Error("SDK do Firebase não carregado");
+        }
+        if (!firebase.apps || firebase.apps.length === 0) {
+          firebase.initializeApp(FIREBASE_CONFIG);
+        }
+        db = firebase.firestore();
+        firestoreReady = true;
+        setCloudStatusIndicator("☁️ Firestore OK", "ok");
+        await refreshHistoryFromCloud(false);
+      } catch (err) {
+        firestoreReady = false;
+        setCloudStatusIndicator("☁️ Modo local", "warn");
+      }
+    }
+
+    function normalizeHistoryList(items) {
+      return (Array.isArray(items) ? items : []).sort((a, b) => {
+        const da = a && a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const dbTime = b && b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        return dbTime - da;
+      });
+    }
+
+    async function refreshHistoryFromCloud(showFeedback = false) {
+      if (!firestoreReady || !db) {
+        savedHistory = normalizeHistoryList(readLocalCache());
+        updateHistoryBadge();
+        refreshRegisteredDriversDatalist();
+        checkDuplicateTripCode();
+        return savedHistory;
+      }
+
+      try {
+        const snap = await db.collection(FIRESTORE_COLLECTION).get();
+        const cloudItems = [];
+        snap.forEach(doc => {
+          const data = doc.data() || {};
+          const payload = data.payload && typeof data.payload === "object"
+            ? data.payload
+            : data;
+          const itemId = payload.id || doc.id;
+          cloudItems.push({
+            ...payload,
+            id: itemId,
+            _docId: doc.id,
+            tripCode: payload.tripCode || data.tripCode || doc.id,
+            updatedAt: payload.updatedAt || data.updatedAt || new Date().toISOString(),
+            summaryTotals: payload.summaryTotals || data.summaryTotals || {
+              totalFreight: 0,
+              driverBalance: 0,
+              opNetProfit: 0
+            }
+          });
+        });
+
+        savedHistory = normalizeHistoryList(cloudItems);
+        writeLocalCache(savedHistory);
+        updateHistoryBadge();
+        refreshRegisteredDriversDatalist();
+        checkDuplicateTripCode();
+        setCloudStatusIndicator("☁️ Firestore OK", "ok");
+        if (showFeedback) {
+          showToast(`Sincronizado (${savedHistory.length})`, "☁️");
+        }
+      } catch (err) {
+        setCloudStatusIndicator("☁️ Cache local", "warn");
+        if (showFeedback) {
+          showToast("Sem conexão com Firestore; usando cache local", "⚠️");
+        }
+      }
+      return savedHistory;
+    }
+
+    function getTodayDDMMAA() {
+      const now = new Date();
+      const dd = String(now.getDate()).padStart(2, '0');
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const yy = String(now.getFullYear()).slice(-2);
+      return `${dd}${mm}${yy}`;
+    }
+
+    function uid() {
+      return 'id_' + Math.random().toString(36).slice(2, 9) + '_' + Date.now().toString(36);
+    }
+
+    // Estado inicial com datas vazias ('') para não contar diárias até serem preenchidas
+    function createInitialState() {
+      const todayCode = getTodayDDMMAA();
+      return {
+        id: null,
+        tripCode: `SEMPLACA-${todayCode}`,
+        codeManuallyEdited: false,
+        driverName: '',
+        truckPlate: '',
+        trailerPlate: '',
+        freights: [
+          {
+            id: uid(),
+            label: 'Carga Principal',
+            client: '',
+            weight: '',
+            grossValue: '',
+            autoPerTon: false,
+            ratePerTon: '300',
+            startDate: '',
+            endDate: ''
+          }
+        ],
+        commissionPct: 12,
+        dailyRate: 150,
+        dailyDays: 0,
+        dailyStartDate: '',
+        dailyEndDate: '',
+        dailyDatesManual: false,
+        includeLoadingDay: false,
+        tripStartKm: '',
+        fuelings: [
+          {
+            id: uid(),
+            station: '',
+            date: '',
+            km: '',
+            paidBy: 'company',
+            diesel: {
+              active: true,
+              liters: '',
+              pricePerLiter: '',
+              totalValue: ''
+            },
+            arla32: {
+              active: true,
+              liters: '',
+              pricePerLiter: '',
+              totalValue: ''
+            }
+          }
+        ],
+        expenses: [
+          { id: uid(), item: 'Pedágio', detail: '', value: '', paidBy: 'driver' }
+        ],
+        advances: []
+      };
+    }
+
+    let state = createInitialState();
+
+    // Foco exclusivo: expande a seção selecionada e minimiza as demais
+    function focusSection(sectionId) {
+      if (!SECTION_IDS.includes(sectionId)) return;
+      let changed = false;
+      SECTION_IDS.forEach(id => {
+        const shouldOpen = id === sectionId;
+        if (sectionOpenMap[id] !== shouldOpen) {
+          sectionOpenMap[id] = shouldOpen;
+          changed = true;
+        }
+      });
+      if (changed) {
+        applySectionVisibility();
+      }
+    }
+
+    function handleSectionClick(sectionId, event) {
+      if (!event || !event.target) return;
+      if (event.target.closest('button, input, select, textarea, label, a')) return;
+      focusSection(sectionId);
+    }
+
+    function toggleSectionManual(sectionId) {
+      if (!SECTION_IDS.includes(sectionId)) return;
+      const isCurrentlyOpen = Boolean(sectionOpenMap[sectionId]);
+      if (isCurrentlyOpen) {
+        sectionOpenMap[sectionId] = false;
+        applySectionVisibility();
+      } else {
+        focusSection(sectionId);
+      }
+    }
+
+    function focusAndRun(sectionId, actionFn) {
+      focusSection(sectionId);
+      if (typeof actionFn === 'function') {
+        actionFn();
+      }
+    }
+
+    function applySectionVisibility() {
+      SECTION_IDS.forEach(id => {
+        const isOpen = Boolean(sectionOpenMap[id]);
+        const bodyEl = document.getElementById(`body-${id}`);
+        const btnEl = document.getElementById(`toggle-btn-${id}`);
+        const compactEl = document.getElementById(`compact-${id}`);
+
+        if (bodyEl) {
+          bodyEl.classList.toggle('hidden', !isOpen);
+        }
+        if (btnEl) {
+          btnEl.textContent = isOpen ? '−' : '+';
+          btnEl.title = isOpen ? 'Minimizar seção' : 'Expandir seção';
+        }
+        if (compactEl) {
+          compactEl.classList.toggle('hidden', isOpen);
+        }
+      });
+    }
+
+    function resetSectionsToInitialFocus() {
+      SECTION_IDS.forEach(id => {
+        sectionOpenMap[id] = (id === 'conjunto');
+      });
+      applySectionVisibility();
+    }
+
+    // Barra superior retrátil ao rolar e expansível ao subir ou tocar/clicar
+    function updateCompactHeader() {
+      const header = document.getElementById('topHeader');
+      if (!header) return;
+      const currentY = window.scrollY || window.pageYOffset || 0;
+      if (currentY > 28) {
+        header.classList.add('is-compact');
+      } else {
+        header.classList.remove('is-compact');
+      }
+    }
+
+    function handleHeaderTap(event) {
+      if (event && event.target && event.target.closest('button')) return;
+      const header = document.getElementById('topHeader');
+      if (!header) return;
+      if (header.classList.contains('is-compact')) {
+        header.classList.remove('is-compact');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if ((window.scrollY || 0) > 28) {
+        header.classList.add('is-compact');
+      }
+    }
+
+    // Conversão numérica com suporte a vírgula e ponto
+    function parseNum(val) {
+      if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
+      if (val === null || val === undefined) return 0;
+      const str = String(val).trim().replace(/\s+/g, '');
+      if (!str) return 0;
+      if (str.includes(',') && str.includes('.')) {
+        const cleaned = str.replace(/\./g, '').replace(',', '.');
+        const n = parseFloat(cleaned);
+        return Number.isFinite(n) ? n : 0;
+      }
+      const normalized = str.replace(',', '.');
+      const n = parseFloat(normalized);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function hasNumericValue(val) {
+      if (val === null || val === undefined) return false;
+      const str = String(val).trim();
+      if (!str) return false;
+      return Number.isFinite(parseNum(str));
+    }
+
+    function formatBRL(num) {
+      const safe = Number.isFinite(num) ? num : 0;
+      return safe.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function formatTons(num) {
+      const safe = Number.isFinite(num) ? num : 0;
+      return safe.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' t';
+    }
+
+    function formatLiters(num) {
+      const safe = Number.isFinite(num) ? num : 0;
+      return safe.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 2 }) + ' L';
+    }
+
+    function formatKm(num) {
+      const safe = Number.isFinite(num) ? num : 0;
+      return safe.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + ' km';
+    }
+
+    function formatKmPerLiter(num) {
+      const safe = Number.isFinite(num) ? num : 0;
+      return safe.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' km/L';
+    }
+
+    function formatUnitPrice(num) {
+      const safe = Number.isFinite(num) ? num : 0;
+      return safe.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function showToast(message, icon = '✅') {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = 'toast-enter pointer-events-auto bg-slate-900 text-white px-3.5 py-2.5 rounded-xl shadow-lg border border-slate-700 flex items-center gap-2 text-xs sm:text-sm font-medium';
+      el.innerHTML = `<span>${icon}</span><span>${escapeHtml(message)}</span>`;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(6px)';
+        el.style.transition = 'all 0.2s ease';
+        setTimeout(() => el.remove(), 220);
+      }, 2200);
+    }
+
+    // Seção 1: Código, Placas e Motorista
+    function sanitizePlate(val) {
+      return String(val || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    }
+
+    function getPlatePrefixForCode() {
+      const plate = sanitizePlate(state.truckPlate);
+      return plate || 'SEMPLACA';
+    }
+
+    function extractSuffixOrDefault(codeStr) {
+      const clean = String(codeStr || '').toUpperCase().trim();
+      const parts = clean.split('-');
+      if (parts.length > 1 && parts.slice(1).join('-')) {
+        return parts.slice(1).join('-');
+      }
+      return getTodayDDMMAA();
+    }
+
+    function ensureTripCode(targetState = state) {
+      if (!targetState.tripCode || !String(targetState.tripCode).trim()) {
+        const prefix = sanitizePlate(targetState.truckPlate) || 'SEMPLACA';
+        targetState.tripCode = `${prefix}-${getTodayDDMMAA()}`;
+      }
+      return String(targetState.tripCode).toUpperCase().trim();
+    }
+
+    function handleTripCodeInput(val) {
+      state.tripCode = String(val || '').toUpperCase();
+      state.codeManuallyEdited = true;
+      checkDuplicateTripCode();
+      updateSummaryAndReceipt();
+    }
+
+    function regenerateTripCode() {
+      const prefix = getPlatePrefixForCode();
+      state.tripCode = `${prefix}-${getTodayDDMMAA()}`;
+      state.codeManuallyEdited = false;
+      const input = document.getElementById('tripCodeInput');
+      if (input) input.value = state.tripCode;
+      checkDuplicateTripCode();
+      updateSummaryAndReceipt();
+      showToast(`Novo código: ${state.tripCode}`, '↻');
+    }
+
+    function copyTripCode() {
+      const code = ensureTripCode(state);
+      copyTextToClipboard(code, `Código ${code} copiado!`);
+    }
+
+    function checkDuplicateTripCode() {
+      const currentCode = ensureTripCode(state);
+      const alertBox = document.getElementById('duplicateCodeAlert');
+      const msgEl = document.getElementById('duplicateCodeMessage');
+      if (!alertBox || !msgEl) return;
+
+      const duplicate = savedHistory.find(
+        item => item.id !== state.id && String(item.tripCode || '').toUpperCase().trim() === currentCode
+      );
+
+      if (duplicate) {
+        msgEl.textContent = `O código "${currentCode}" já existe em um acerto salvo (${duplicate.driverName || 'Sem motorista'}).`;
+        alertBox.classList.remove('hidden');
+      } else {
+        alertBox.classList.add('hidden');
+      }
+    }
+
+    function openDuplicateInHistory() {
+      const currentCode = ensureTripCode(state);
+      const duplicate = savedHistory.find(
+        item => item.id !== state.id && String(item.tripCode || '').toUpperCase().trim() === currentCode
+      );
+      if (duplicate) {
+        loadHistoryItem(duplicate.id);
+      }
+    }
+
+    function handlePlateInput(field, rawValue) {
+      const clean = sanitizePlate(rawValue);
+      state[field] = clean;
+      const el = document.getElementById(field);
+      if (el && el.value !== clean) el.value = clean;
+
+      if (field === 'truckPlate' && !state.codeManuallyEdited) {
+        const suffix = extractSuffixOrDefault(state.tripCode);
+        const prefix = clean || 'SEMPLACA';
+        state.tripCode = `${prefix}-${suffix}`;
+        const codeInput = document.getElementById('tripCodeInput');
+        if (codeInput) codeInput.value = state.tripCode;
+        checkDuplicateTripCode();
+      }
+      updateSummaryAndReceipt();
+    }
+
+    function handleDriverNameInput(val) {
+      state.driverName = val;
+      refreshRegisteredDriversDatalist();
+      updateSummaryAndReceipt();
+    }
+
+    function getRegisteredDrivers() {
+      const namesSet = new Set(['Elias', 'Carlos']);
+      savedHistory.forEach(item => {
+        const clean = String(item.driverName || '').trim();
+        if (clean) namesSet.add(clean);
+      });
+      const current = String(state.driverName || '').trim();
+      if (current) namesSet.add(current);
+      return Array.from(namesSet).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    }
+
+    function refreshRegisteredDriversDatalist() {
+      const datalist = document.getElementById('registeredDriversList');
+      if (!datalist) return;
+      const drivers = getRegisteredDrivers();
+      datalist.innerHTML = drivers.map(name => `<option value="${escapeHtml(name)}"></option>`).join('');
+    }
+
+    function clearConjuntoSection() {
+      state.driverName = '';
+      state.truckPlate = '';
+      state.trailerPlate = '';
+      state.codeManuallyEdited = false;
+      state.tripCode = `SEMPLACA-${getTodayDDMMAA()}`;
+
+      document.getElementById('driverName').value = '';
+      document.getElementById('truckPlate').value = '';
+      document.getElementById('trailerPlate').value = '';
+      document.getElementById('tripCodeInput').value = state.tripCode;
+
+      checkDuplicateTripCode();
+      updateSummaryAndReceipt();
+      showToast('Identificação do conjunto limpa', '🧹');
+    }
+
+    // Cálculo de dias entre datas: retorna 0 enquanto o período não estiver completo
+    function calculateDaysBetween(startStr, endStr) {
+      if (!startStr || !endStr) return 0;
+      const s = new Date(startStr + 'T12:00:00');
+      const e = new Date(endStr + 'T12:00:00');
+      if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return 0;
+      const diffMs = e.getTime() - s.getTime();
+      if (diffMs < 0) return 0;
+      return Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+    }
+
+    function syncDailyDatesFromFreights(force = false) {
+      if (state.dailyDatesManual && !force) return;
+      const validStarts = state.freights.map(f => f.startDate).filter(Boolean).sort();
+      const validEnds = state.freights.map(f => f.endDate).filter(Boolean).sort();
+
+      if (validStarts.length > 0) {
+        state.dailyStartDate = validStarts[0];
+      } else if (force) {
+        state.dailyStartDate = '';
+      }
+
+      if (validEnds.length > 0) {
+        state.dailyEndDate = validEnds[validEnds.length - 1];
+      } else if (force) {
+        state.dailyEndDate = '';
+      }
+
+      if (state.dailyStartDate && state.dailyEndDate && state.dailyEndDate < state.dailyStartDate) {
+        state.dailyEndDate = state.dailyStartDate;
+      }
+
+      const startEl = document.getElementById('dailyStartDate');
+      const endEl = document.getElementById('dailyEndDate');
+      if (startEl) startEl.value = state.dailyStartDate || '';
+      if (endEl) endEl.value = state.dailyEndDate || '';
+
+      if (force) {
+        state.dailyDatesManual = false;
+        updateSummaryAndReceipt();
+        showToast('Datas sincronizadas com as cargas', '📅');
+      }
+    }
+
+    function onDailyDatesManualChange() {
+      state.dailyDatesManual = true;
+      state.dailyStartDate = document.getElementById('dailyStartDate').value;
+      state.dailyEndDate = document.getElementById('dailyEndDate').value;
+      updateSummaryAndReceipt();
+    }
+
+    // Seção 2: Faturamento (Cargas)
+    function renderFreights() {
+      const container = document.getElementById('freightsList');
+      if (!container) return;
+      container.innerHTML = '';
+
+      state.freights.forEach((freight, idx) => {
+        const card = document.createElement('div');
+        card.className = 'p-3.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-3';
+        card.dataset.freightId = freight.id;
+
+        const computedAutoVal = parseNum(freight.weight) * (parseNum(freight.ratePerTon) || 300);
+        const canRemove = state.freights.length > 1;
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 flex-1 min-w-0">
+              <span class="text-xs font-bold text-slate-500 shrink-0">#${idx + 1}</span>
+              <input
+                type="text"
+                value="${escapeHtml(freight.label)}"
+                oninput="updateFreightField('${freight.id}', 'label', this.value)"
+                placeholder="Nome da carga"
+                class="bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 w-full max-w-[190px]"
+              />
+            </div>
+
+            <div class="flex items-center gap-2">
+              <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  ${freight.autoPerTon ? 'checked' : ''}
+                  onchange="toggleFreightAutoPerTon('${freight.id}', this.checked)"
+                  class="rounded text-blue-600 focus:ring-blue-500"
+                />
+                <span>Auto R$/t</span>
+              </label>
+
+              ${canRemove ? `
+                <button
+                  type="button"
+                  onclick="removeFreight('${freight.id}')"
+                  class="btn-danger-ghost px-2 py-1 text-xs font-bold"
+                  title="Remover carga"
+                >
+                  ✕
+                </button>
+              ` : ''}
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Cliente / Origem-Destino</label>
+              <input
+                type="text"
+                value="${escapeHtml(freight.client)}"
+                oninput="updateFreightField('${freight.id}', 'client', this.value)"
+                placeholder="Ex: Cliente / Rota"
+                class="input-field bg-white py-1.5 text-xs sm:text-sm"
+              />
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Peso (ton)</label>
+              <input
+                type="text"
+                inputmode="decimal"
+                value="${escapeHtml(freight.weight)}"
+                oninput="updateFreightField('${freight.id}', 'weight', this.value)"
+                placeholder="Ex: 31,5"
+                class="input-field bg-white py-1.5 text-xs sm:text-sm font-semibold"
+              />
+            </div>
+
+            <div>
+              ${freight.autoPerTon ? `
+                <label class="block text-[11px] font-semibold text-blue-700 mb-1">Multiplicador (R$/ton)</label>
+                <input
+                  type="text"
+                  inputmode="decimal"
+                  value="${escapeHtml(freight.ratePerTon)}"
+                  oninput="updateFreightField('${freight.id}', 'ratePerTon', this.value)"
+                  placeholder="300"
+                  class="input-field bg-white border-blue-300 py-1.5 text-xs sm:text-sm font-bold text-blue-900"
+                />
+              ` : `
+                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Valor Bruto (R$)</label>
+                <input
+                  type="text"
+                  inputmode="decimal"
+                  value="${escapeHtml(freight.grossValue)}"
+                  oninput="updateFreightField('${freight.id}', 'grossValue', this.value)"
+                  placeholder="0,00"
+                  class="input-field bg-white py-1.5 text-xs sm:text-sm font-bold text-emerald-700"
+                />
+              `}
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <div class="flex items-center gap-1">
+                <span class="text-[11px] font-semibold text-slate-500">Início:</span>
+                <input
+                  type="date"
+                  value="${escapeHtml(freight.startDate)}"
+                  onchange="updateFreightDate('${freight.id}', 'startDate', this.value)"
+                  class="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700"
+                />
+              </div>
+              <div class="flex items-center gap-1">
+                <span class="text-[11px] font-semibold text-slate-500">Fim:</span>
+                <input
+                  type="date"
+                  value="${escapeHtml(freight.endDate)}"
+                  onchange="updateFreightDate('${freight.id}', 'endDate', this.value)"
+                  class="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700"
+                />
+              </div>
+            </div>
+
+            <div class="text-xs font-semibold text-slate-600" data-role="freight-subtotal">
+              ${freight.autoPerTon ? `Calculado: <strong class="text-emerald-700">${formatBRL(computedAutoVal)}</strong>` : ''}
+            </div>
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    function refreshFreightSubtotalInDom(freight) {
+      const card = document.querySelector(`[data-freight-id="${freight.id}"]`);
+      if (!card) return;
+      const subEl = card.querySelector('[data-role="freight-subtotal"]');
+      if (!subEl) return;
+      if (freight.autoPerTon) {
+        const computedVal = parseNum(freight.weight) * (parseNum(freight.ratePerTon) || 300);
+        subEl.innerHTML = `Calculado: <strong class="text-emerald-700">${formatBRL(computedVal)}</strong>`;
+      } else {
+        subEl.innerHTML = '';
+      }
+    }
+
+    function updateFreightField(id, field, value) {
+      const f = state.freights.find(item => item.id === id);
+      if (!f) return;
+      f[field] = value;
+
+      if (f.autoPerTon && (field === 'weight' || field === 'ratePerTon')) {
+        const computed = parseNum(f.weight) * (parseNum(f.ratePerTon) || 300);
+        f.grossValue = computed ? String(Number(computed.toFixed(2))) : '';
+      }
+
+      refreshFreightSubtotalInDom(f);
+      updateSummaryAndReceipt();
+    }
+
+    function toggleFreightAutoPerTon(id, checked) {
+      const f = state.freights.find(item => item.id === id);
+      if (!f) return;
+      f.autoPerTon = checked;
+      if (!f.ratePerTon) f.ratePerTon = '300';
+      if (checked) {
+        const computed = parseNum(f.weight) * (parseNum(f.ratePerTon) || 300);
+        f.grossValue = computed ? String(Number(computed.toFixed(2))) : '';
+      }
+      renderFreights();
+      updateSummaryAndReceipt();
+    }
+
+    function updateFreightDate(id, field, value) {
+      const f = state.freights.find(item => item.id === id);
+      if (!f) return;
+      f[field] = value;
+      syncDailyDatesFromFreights(false);
+      updateSummaryAndReceipt();
+    }
+
+    function addFreight() {
+      const idx = state.freights.length + 1;
+      state.freights.push({
+        id: uid(),
+        label: `Carga ${idx}`,
+        client: '',
+        weight: '',
+        grossValue: '',
+        autoPerTon: false,
+        ratePerTon: '300',
+        startDate: '',
+        endDate: ''
+      });
+      renderFreights();
+      syncDailyDatesFromFreights(false);
+      updateSummaryAndReceipt();
+      showToast(`Carga #${idx} adicionada`, '➕');
+    }
+
+    function removeFreight(id) {
+      if (state.freights.length <= 1) return;
+      state.freights = state.freights.filter(f => f.id !== id);
+      renderFreights();
+      syncDailyDatesFromFreights(false);
+      updateSummaryAndReceipt();
+    }
+
+    // Seção 4: Abastecimentos (KM Inicial único no topo + KM por abastecimento + Diesel e Arla 32 empilhados)
+    function evaluateFuelSubItem(sub) {
+      const item = sub || {};
+      const isActive = item.active !== false;
+      if (!isActive) {
+        return {
+          active: false,
+          liters: 0,
+          pricePerLiter: 0,
+          totalValue: 0
+        };
+      }
+      const liters = parseNum(item.liters);
+      const total = parseNum(item.totalValue);
+      const price = (liters > 0 && total > 0) ? (total / liters) : parseNum(item.pricePerLiter);
+
+      return {
+        active: true,
+        liters: Number.isFinite(liters) ? liters : 0,
+        pricePerLiter: Number.isFinite(price) ? price : 0,
+        totalValue: Number.isFinite(total) ? total : 0
+      };
+    }
+
+    function handleTripStartKmInput(val) {
+      state.tripStartKm = val;
+      updateSummaryAndReceipt();
+    }
+
+    // Calcula a média de cada abastecimento em relação ao ponto anterior (KM Inicial no 1º; KM anterior nos seguintes)
+    // e o consolidado geral para Diesel e Arla 32
+    function computeFuelingsMetrics(fuelingsList, tripStartKmRaw) {
+      const list = Array.isArray(fuelingsList) ? fuelingsList : [];
+      const hasTripStartKm = hasNumericValue(tripStartKmRaw);
+      const tripStartKm = hasTripStartKm ? parseNum(tripStartKmRaw) : null;
+
+      let prevReferenceKm = tripStartKm;
+      let firstMeasuredKm = null;
+      let lastMeasuredKm = null;
+
+      let totalDieselLiters = 0;
+      let totalDieselValue = 0;
+      let totalArlaLiters = 0;
+      let totalArlaValue = 0;
+      let driverFuelings = 0;
+      let companyFuelings = 0;
+
+      const legMetrics = list.map((fuel, idx) => {
+        const dEval = evaluateFuelSubItem(fuel.diesel);
+        const aEval = evaluateFuelSubItem(fuel.arla32);
+        const rowTotal = dEval.totalValue + aEval.totalValue;
+
+        totalDieselLiters += dEval.liters;
+        totalDieselValue += dEval.totalValue;
+        totalArlaLiters += aEval.liters;
+        totalArlaValue += aEval.totalValue;
+
+        if (fuel.paidBy === 'driver') {
+          driverFuelings += rowTotal;
+        } else {
+          companyFuelings += rowTotal;
+        }
+
+        const hasCurrentKm = hasNumericValue(fuel.km);
+        const currentKm = hasCurrentKm ? parseNum(fuel.km) : null;
+
+        if (currentKm !== null) {
+          if (firstMeasuredKm === null) firstMeasuredKm = currentKm;
+          lastMeasuredKm = currentKm;
+        }
+
+        let deltaKm = null;
+        let dieselKmPerLiter = null;
+        let arlaKmPerLiter = null;
+        let statusText = '';
+        let legBadgeText = 'Trecho: —';
+
+        const refLabel = idx === 0 ? 'KM Inicial' : `Abast. #${idx}`;
+
+        if (!hasCurrentKm) {
+          statusText = 'Informe o KM deste abastecimento';
+        } else if (prevReferenceKm === null) {
+          statusText = idx === 0 ? 'Informe o KM Inicial no topo' : 'Sem KM anterior';
+        } else if (currentKm < prevReferenceKm) {
+          statusText = `KM menor que ${refLabel} (${formatKm(prevReferenceKm)})`;
+          legBadgeText = 'KM inválido';
+        } else {
+          deltaKm = currentKm - prevReferenceKm;
+          statusText = `vs ${refLabel} (${formatKm(prevReferenceKm)})`;
+          legBadgeText = `+ ${formatKm(deltaKm)}`;
+          if (dEval.active && dEval.liters > 0) {
+            dieselKmPerLiter = deltaKm / dEval.liters;
+          }
+          if (aEval.active && aEval.liters > 0) {
+            arlaKmPerLiter = deltaKm / aEval.liters;
+          }
+        }
+
+        if (hasCurrentKm) {
+          prevReferenceKm = currentKm;
+        }
+
+        return {
+          fuelId: fuel.id,
+          currentKm,
+          deltaKm,
+          statusText,
+          legBadgeText,
+          dieselKmPerLiter,
+          arlaKmPerLiter,
+          rowTotal,
+          dEval,
+          aEval
+        };
+      });
+
+      const totalFuelings = totalDieselValue + totalArlaValue;
+      const dieselAvgUnit = totalDieselLiters > 0 ? totalDieselValue / totalDieselLiters : 0;
+      const arlaAvgUnit = totalArlaLiters > 0 ? totalArlaValue / totalArlaLiters : 0;
+
+      const baseStartForSpan = tripStartKm !== null ? tripStartKm : firstMeasuredKm;
+      const totalKmDriven = (baseStartForSpan !== null && lastMeasuredKm !== null && lastMeasuredKm >= baseStartForSpan)
+        ? (lastMeasuredKm - baseStartForSpan)
+        : 0;
+
+      const dieselGeneralKmL = (totalKmDriven > 0 && totalDieselLiters > 0)
+        ? (totalKmDriven / totalDieselLiters)
+        : 0;
+
+      const arlaGeneralKmL = (totalKmDriven > 0 && totalArlaLiters > 0)
+        ? (totalKmDriven / totalArlaLiters)
+        : 0;
+
+      return {
+        legMetrics,
+        totalKmDriven,
+        totalDieselLiters,
+        totalDieselValue,
+        dieselAvgUnit,
+        dieselGeneralKmL,
+        totalArlaLiters,
+        totalArlaValue,
+        arlaAvgUnit,
+        arlaGeneralKmL,
+        driverFuelings,
+        companyFuelings,
+        totalFuelings
+      };
+    }
+
+    function renderFuelings() {
+      const container = document.getElementById('fuelingsList');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (!state.fuelings || state.fuelings.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 italic py-2">Nenhum abastecimento lançado. Clique em <strong>+ Abast.</strong> para adicionar.</p>`;
+        return;
+      }
+
+      const metrics = computeFuelingsMetrics(state.fuelings, state.tripStartKm);
+
+      state.fuelings.forEach((fuel, idx) => {
+        if (!fuel.diesel) fuel.diesel = { active: true, liters: '', pricePerLiter: '', totalValue: '' };
+        if (fuel.diesel.active === undefined) fuel.diesel.active = true;
+        if (!fuel.arla32) fuel.arla32 = { active: true, liters: '', pricePerLiter: '', totalValue: '' };
+        if (fuel.arla32.active === undefined) fuel.arla32.active = true;
+
+        const leg = metrics.legMetrics[idx] || {};
+        const isCompany = fuel.paidBy !== 'driver';
+        const dEval = leg.dEval || evaluateFuelSubItem(fuel.diesel);
+        const aEval = leg.aEval || evaluateFuelSubItem(fuel.arla32);
+        const rowTotal = dEval.totalValue + aEval.totalValue;
+
+        const dUnitText = dEval.active && dEval.liters > 0 && dEval.totalValue > 0 ? formatUnitPrice(dEval.pricePerLiter) : '—';
+        const aUnitText = aEval.active && aEval.liters > 0 && aEval.totalValue > 0 ? formatUnitPrice(aEval.pricePerLiter) : '—';
+
+        const dAvgText = (dEval.active && leg.dieselKmPerLiter && leg.dieselKmPerLiter > 0)
+          ? formatKmPerLiter(leg.dieselKmPerLiter)
+          : '— km/L';
+        const aAvgText = (aEval.active && leg.arlaKmPerLiter && leg.arlaKmPerLiter > 0)
+          ? formatKmPerLiter(leg.arlaKmPerLiter)
+          : '— km/L';
+
+        const row = document.createElement('div');
+        row.className = 'p-3.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-3';
+        row.dataset.fuelingId = fuel.id;
+
+        row.innerHTML = `
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs font-extrabold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md">#${idx + 1}</span>
+              <input
+                type="text"
+                value="${escapeHtml(fuel.station)}"
+                oninput="updateFuelingMeta('${fuel.id}', 'station', this.value)"
+                placeholder="Posto / Cidade / Obs"
+                class="input-field bg-white py-1.5 text-xs w-40 sm:w-44"
+              />
+              <input
+                type="date"
+                value="${escapeHtml(fuel.date)}"
+                onchange="updateFuelingMeta('${fuel.id}', 'date', this.value)"
+                class="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-700"
+              />
+            </div>
+
+            <div class="flex items-center gap-2">
+              <div class="flex rounded-lg bg-slate-200/70 p-0.5 border border-slate-200">
+                <button
+                  type="button"
+                  onclick="setFuelingPayer('${fuel.id}', 'driver')"
+                  class="py-1 px-2 rounded-md text-[11px] font-bold transition ${!isCompany ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+                >
+                  Motorista
+                </button>
+                <button
+                  type="button"
+                  onclick="setFuelingPayer('${fuel.id}', 'company')"
+                  class="py-1 px-2 rounded-md text-[11px] font-bold transition ${isCompany ? 'bg-slate-800 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+                >
+                  Empresa
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onclick="removeFueling('${fuel.id}')"
+                class="btn-danger-ghost w-7 h-7 flex items-center justify-center text-xs font-bold"
+                title="Excluir abastecimento"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- KM único do abastecimento + trecho percorrido + médias individuais -->
+          <div class="p-2.5 rounded-xl bg-white border border-slate-200 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
+              <label class="text-[11px] font-extrabold text-slate-700 shrink-0">KM do Abastecimento:</label>
+              <input
+                type="text"
+                inputmode="decimal"
+                value="${escapeHtml(fuel.km)}"
+                oninput="updateFuelingMeta('${fuel.id}', 'km', this.value)"
+                placeholder="Ex: 125650"
+                class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 w-32 focus:outline-none focus:bg-white focus:border-blue-500"
+              />
+              <span data-role="fueling-leg-badge" class="text-[11px] font-extrabold text-indigo-800 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md">
+                ${escapeHtml(leg.legBadgeText || 'Trecho: —')}
+              </span>
+              <span data-role="fueling-status" class="text-[11px] font-medium text-slate-500">
+                ${escapeHtml(leg.statusText || '')}
+              </span>
+            </div>
+
+            <div class="flex items-center gap-1.5 flex-wrap text-[11px] font-bold">
+              <span data-role="fueling-diesel-avg" class="px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
+                Diesel: ${escapeHtml(dAvgText)}
+              </span>
+              <span data-role="fueling-arla-avg" class="px-2 py-0.5 rounded-md bg-cyan-50 text-cyan-900 border border-cyan-200">
+                Arla: ${escapeHtml(aAvgText)}
+              </span>
+            </div>
+          </div>
+
+          <!-- Diesel e Arla 32 empilhados um em cima do outro -->
+          <div class="space-y-2.5">
+            <!-- DIESEL -->
+            <div data-fuel-sub="diesel" class="p-3 rounded-xl bg-white border border-slate-200 space-y-2.5 transition ${dEval.active ? '' : 'opacity-70 bg-slate-100/60'}">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <label class="inline-flex items-center gap-2 text-xs font-extrabold text-slate-800 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    ${dEval.active ? 'checked' : ''}
+                    onchange="toggleFuelSubActive('${fuel.id}', 'diesel', this.checked)"
+                    class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>⛽ Abasteceu Diesel</span>
+                </label>
+
+                <span data-role="diesel-unit-badge" class="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                  R$/L: ${dUnitText}
+                </span>
+              </div>
+
+              <div data-role="diesel-fields" class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end ${dEval.active ? '' : 'hidden'}">
+                <div>
+                  <label class="block text-[11px] font-semibold text-slate-600 mb-1">Litros Diesel (L)</label>
+                  <input
+                    type="text"
+                    inputmode="decimal"
+                    data-field="liters"
+                    value="${escapeHtml(fuel.diesel.liters)}"
+                    oninput="updateFuelSubField('${fuel.id}', 'diesel', 'liters', this.value)"
+                    placeholder="Ex: 300"
+                    class="input-field py-1.5 text-xs sm:text-sm font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label class="block text-[11px] font-semibold text-slate-600 mb-1">Valor Total Diesel (R$)</label>
+                  <input
+                    type="text"
+                    inputmode="decimal"
+                    data-field="totalValue"
+                    value="${escapeHtml(fuel.diesel.totalValue)}"
+                    oninput="updateFuelSubField('${fuel.id}', 'diesel', 'totalValue', this.value)"
+                    placeholder="Ex: 1800,00"
+                    class="input-field py-1.5 text-xs sm:text-sm font-bold text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <span class="block text-[11px] font-semibold text-blue-700 mb-1">Valor do Litro (Auto)</span>
+                  <div data-role="diesel-unit-readout" class="input-field py-1.5 text-xs sm:text-sm font-extrabold text-blue-800 bg-blue-50/70 border-blue-200 flex items-center justify-between">
+                    <span>${dUnitText}</span>
+                    <span class="text-[10px] font-semibold text-blue-600">/L</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ARLA 32 -->
+            <div data-fuel-sub="arla32" class="p-3 rounded-xl bg-cyan-50/50 border border-cyan-200/90 space-y-2.5 transition ${aEval.active ? '' : 'opacity-70 bg-slate-100/60 border-slate-200'}">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <label class="inline-flex items-center gap-2 text-xs font-extrabold text-cyan-950 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    ${aEval.active ? 'checked' : ''}
+                    onchange="toggleFuelSubActive('${fuel.id}', 'arla32', this.checked)"
+                    class="w-4 h-4 rounded text-cyan-700 focus:ring-cyan-600"
+                  />
+                  <span>💧 Abasteceu Arla 32</span>
+                </label>
+
+                <span data-role="arla32-unit-badge" class="text-[11px] font-bold text-cyan-900 bg-white border border-cyan-200 px-2 py-0.5 rounded-md">
+                  R$/L: ${aUnitText}
+                </span>
+              </div>
+
+              <div data-role="arla32-fields" class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end ${aEval.active ? '' : 'hidden'}">
+                <div>
+                  <label class="block text-[11px] font-semibold text-cyan-950 mb-1">Litros Arla 32 (L)</label>
+                  <input
+                    type="text"
+                    inputmode="decimal"
+                    data-field="liters"
+                    value="${escapeHtml(fuel.arla32.liters)}"
+                    oninput="updateFuelSubField('${fuel.id}', 'arla32', 'liters', this.value)"
+                    placeholder="Ex: 40"
+                    class="input-field bg-white py-1.5 text-xs sm:text-sm font-semibold"
+                  />
+                </div>
+
+                <div>
+                  <label class="block text-[11px] font-semibold text-cyan-950 mb-1">Valor Total Arla 32 (R$)</label>
+                  <input
+                    type="text"
+                    inputmode="decimal"
+                    data-field="totalValue"
+                    value="${escapeHtml(fuel.arla32.totalValue)}"
+                    oninput="updateFuelSubField('${fuel.id}', 'arla32', 'totalValue', this.value)"
+                    placeholder="Ex: 120,00"
+                    class="input-field bg-white py-1.5 text-xs sm:text-sm font-bold text-cyan-950"
+                  />
+                </div>
+
+                <div>
+                  <span class="block text-[11px] font-semibold text-cyan-900 mb-1">Valor do Litro (Auto)</span>
+                  <div data-role="arla32-unit-readout" class="input-field py-1.5 text-xs sm:text-sm font-extrabold text-cyan-900 bg-white/90 border-cyan-200 flex items-center justify-between">
+                    <span>${aUnitText}</span>
+                    <span class="text-[10px] font-semibold text-cyan-700">/L</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between text-xs text-slate-600 pt-0.5">
+            <span>Pagador: <strong>${isCompany ? 'Empresa' : 'Motorista'}</strong></span>
+            <span data-role="fueling-row-total">Subtotal Lançamento: <strong class="text-slate-900">${formatBRL(rowTotal)}</strong></span>
+          </div>
+        `;
+
+        container.appendChild(row);
+      });
+    }
+
+    function refreshAllFuelingLegsInDom(fuelMetrics) {
+      if (!fuelMetrics || !Array.isArray(fuelMetrics.legMetrics)) return;
+      fuelMetrics.legMetrics.forEach(leg => {
+        const card = document.querySelector(`[data-fueling-id="${leg.fuelId}"]`);
+        if (!card) return;
+
+        const legBadgeEl = card.querySelector('[data-role="fueling-leg-badge"]');
+        if (legBadgeEl) {
+          legBadgeEl.textContent = leg.legBadgeText || 'Trecho: —';
+        }
+
+        const statusEl = card.querySelector('[data-role="fueling-status"]');
+        if (statusEl) {
+          statusEl.textContent = leg.statusText || '';
+        }
+
+        const dAvgEl = card.querySelector('[data-role="fueling-diesel-avg"]');
+        if (dAvgEl) {
+          const dActive = leg.dEval && leg.dEval.active;
+          const dText = (dActive && leg.dieselKmPerLiter && leg.dieselKmPerLiter > 0)
+            ? formatKmPerLiter(leg.dieselKmPerLiter)
+            : '— km/L';
+          dAvgEl.textContent = `Diesel: ${dText}`;
+        }
+
+        const aAvgEl = card.querySelector('[data-role="fueling-arla-avg"]');
+        if (aAvgEl) {
+          const aActive = leg.aEval && leg.aEval.active;
+          const aText = (aActive && leg.arlaKmPerLiter && leg.arlaKmPerLiter > 0)
+            ? formatKmPerLiter(leg.arlaKmPerLiter)
+            : '— km/L';
+          aAvgEl.textContent = `Arla: ${aText}`;
+        }
+
+        const totalEl = card.querySelector('[data-role="fueling-row-total"]');
+        if (totalEl) {
+          totalEl.innerHTML = `Subtotal Lançamento: <strong class="text-slate-900">${formatBRL(leg.rowTotal || 0)}</strong>`;
+        }
+      });
+    }
+
+    function addFueling() {
+      state.fuelings.push({
+        id: uid(),
+        station: '',
+        date: '',
+        km: '',
+        paidBy: 'company',
+        diesel: { active: true, liters: '', pricePerLiter: '', totalValue: '' },
+        arla32: { active: true, liters: '', pricePerLiter: '', totalValue: '' }
+      });
+      renderFuelings();
+      updateSummaryAndReceipt();
+      showToast('Novo abastecimento adicionado', '⛽');
+    }
+
+    function removeFueling(id) {
+      state.fuelings = state.fuelings.filter(f => f.id !== id);
+      renderFuelings();
+      updateSummaryAndReceipt();
+    }
+
+    function updateFuelingMeta(id, field, value) {
+      const f = state.fuelings.find(item => item.id === id);
+      if (!f) return;
+      f[field] = value;
+      updateSummaryAndReceipt();
+    }
+
+    function setFuelingPayer(id, payer) {
+      const f = state.fuelings.find(item => item.id === id);
+      if (!f) return;
+      f.paidBy = payer === 'driver' ? 'driver' : 'company';
+      renderFuelings();
+      updateSummaryAndReceipt();
+    }
+
+    function toggleFuelSubActive(id, subKey, checked) {
+      const fuel = state.fuelings.find(item => item.id === id);
+      if (!fuel) return;
+      const key = subKey === 'arla32' ? 'arla32' : 'diesel';
+      if (!fuel[key]) {
+        fuel[key] = { active: true, liters: '', pricePerLiter: '', totalValue: '' };
+      }
+      fuel[key].active = Boolean(checked);
+      renderFuelings();
+      updateSummaryAndReceipt();
+    }
+
+    function updateFuelSubField(id, subKey, field, value) {
+      const fuel = state.fuelings.find(item => item.id === id);
+      if (!fuel) return;
+      const key = subKey === 'arla32' ? 'arla32' : 'diesel';
+      if (!fuel[key]) {
+        fuel[key] = { active: true, liters: '', pricePerLiter: '', totalValue: '' };
+      }
+      const sub = fuel[key];
+      sub[field] = value;
+
+      const evalRes = evaluateFuelSubItem(sub);
+      sub.pricePerLiter = (evalRes.active && evalRes.liters > 0 && evalRes.totalValue > 0)
+        ? String(Number(evalRes.pricePerLiter.toFixed(4)))
+        : '';
+
+      refreshFuelSubInDom(fuel, key);
+      updateSummaryAndReceipt();
+    }
+
+    function refreshFuelSubInDom(fuel, subKey) {
+      const card = document.querySelector(`[data-fueling-id="${fuel.id}"]`);
+      if (!card) return;
+      const subBox = card.querySelector(`[data-fuel-sub="${subKey}"]`);
+      if (!subBox) return;
+
+      const evalRes = evaluateFuelSubItem(fuel[subKey]);
+      const unitFormatted = (evalRes.active && evalRes.liters > 0 && evalRes.totalValue > 0)
+        ? formatUnitPrice(evalRes.pricePerLiter)
+        : '—';
+
+      const badge = subBox.querySelector(`[data-role="${subKey}-unit-badge"]`);
+      if (badge) {
+        badge.textContent = `R$/L: ${unitFormatted}`;
+      }
+
+      const readout = subBox.querySelector(`[data-role="${subKey}-unit-readout"] > span:first-child`);
+      if (readout) {
+        readout.textContent = unitFormatted;
+      }
+    }
+
+    // Seção 5: Despesas
+    function renderExpenses() {
+      const container = document.getElementById('expensesList');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (state.expenses.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 italic py-2">Nenhuma despesa lançada.</p>`;
+        return;
+      }
+
+      state.expenses.forEach(exp => {
+        const isCompany = exp.paidBy === 'company';
+        const row = document.createElement('div');
+        row.className = 'p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center';
+
+        row.innerHTML = `
+          <div class="sm:col-span-3">
+            <input
+              type="text"
+              value="${escapeHtml(exp.item)}"
+              oninput="updateExpenseField('${exp.id}', 'item', this.value)"
+              placeholder="Tipo (Ex: Pedágio)"
+              class="input-field bg-white py-1.5 text-xs font-semibold"
+            />
+          </div>
+
+          <div class="sm:col-span-3">
+            <input
+              type="text"
+              value="${escapeHtml(exp.detail)}"
+              oninput="updateExpenseField('${exp.id}', 'detail', this.value)"
+              placeholder="Detalhe / Obs"
+              class="input-field bg-white py-1.5 text-xs"
+            />
+          </div>
+
+          <div class="sm:col-span-3 flex rounded-lg bg-slate-200/70 p-0.5 border border-slate-200">
+            <button
+              type="button"
+              onclick="setExpensePayer('${exp.id}', 'driver')"
+              class="flex-1 py-1 px-2 rounded-md text-[11px] font-bold transition ${!isCompany ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+            >
+              Motorista
+            </button>
+            <button
+              type="button"
+              onclick="setExpensePayer('${exp.id}', 'company')"
+              class="flex-1 py-1 px-2 rounded-md text-[11px] font-bold transition ${isCompany ? 'bg-slate-800 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}"
+            >
+              Empresa
+            </button>
+          </div>
+
+          <div class="sm:col-span-2">
+            <input
+              type="text"
+              inputmode="decimal"
+              value="${escapeHtml(exp.value)}"
+              oninput="updateExpenseField('${exp.id}', 'value', this.value)"
+              placeholder="0,00"
+              class="input-field bg-white py-1.5 text-xs font-bold text-right"
+            />
+          </div>
+
+          <div class="sm:col-span-1 flex justify-end">
+            <button
+              type="button"
+              onclick="removeExpense('${exp.id}')"
+              class="btn-danger-ghost w-8 h-8 flex items-center justify-center text-xs font-bold"
+              title="Excluir despesa"
+            >
+              ✕
+            </button>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function updateExpenseField(id, field, value) {
+      const exp = state.expenses.find(e => e.id === id);
+      if (!exp) return;
+      exp[field] = value;
+      updateSummaryAndReceipt();
+    }
+
+    function setExpensePayer(id, payer) {
+      const exp = state.expenses.find(e => e.id === id);
+      if (!exp) return;
+      exp.paidBy = payer === 'company' ? 'company' : 'driver';
+      renderExpenses();
+      updateSummaryAndReceipt();
+    }
+
+    function addExpense() {
+      state.expenses.push({
+        id: uid(),
+        item: '',
+        detail: '',
+        value: '',
+        paidBy: 'driver'
+      });
+      renderExpenses();
+      updateSummaryAndReceipt();
+    }
+
+    function removeExpense(id) {
+      state.expenses = state.expenses.filter(e => e.id !== id);
+      renderExpenses();
+      updateSummaryAndReceipt();
+    }
+
+    // Seção 6: Adiantamentos / Vales
+    function renderAdvances() {
+      const container = document.getElementById('advancesList');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (state.advances.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-400 italic py-2">Nenhum adiantamento ou vale registrado.</p>`;
+        return;
+      }
+
+      state.advances.forEach(adv => {
+        const row = document.createElement('div');
+        row.className = 'p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center';
+
+        row.innerHTML = `
+          <div class="sm:col-span-4">
+            <input
+              type="date"
+              value="${escapeHtml(adv.date)}"
+              onchange="updateAdvanceField('${adv.id}', 'date', this.value)"
+              class="input-field bg-white py-1.5 text-xs"
+            />
+          </div>
+          <div class="sm:col-span-4">
+            <input
+              type="text"
+              value="${escapeHtml(adv.desc)}"
+              oninput="updateAdvanceField('${adv.id}', 'desc', this.value)"
+              placeholder="Descrição (Ex: Vale)"
+              class="input-field bg-white py-1.5 text-xs"
+            />
+          </div>
+          <div class="sm:col-span-3">
+            <input
+              type="text"
+              inputmode="decimal"
+              value="${escapeHtml(adv.value)}"
+              oninput="updateAdvanceField('${adv.id}', 'value', this.value)"
+              placeholder="0,00"
+              class="input-field bg-white py-1.5 text-xs font-bold text-rose-700 text-right"
+            />
+          </div>
+          <div class="sm:col-span-1 flex justify-end">
+            <button
+              type="button"
+              onclick="removeAdvance('${adv.id}')"
+              class="btn-danger-ghost w-8 h-8 flex items-center justify-center text-xs font-bold"
+              title="Excluir vale"
+            >
+              ✕
+            </button>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function updateAdvanceField(id, field, value) {
+      const adv = state.advances.find(a => a.id === id);
+      if (!adv) return;
+      adv[field] = value;
+      updateSummaryAndReceipt();
+    }
+
+    function addAdvance() {
+      state.advances.push({
+        id: uid(),
+        date: '',
+        desc: '',
+        value: ''
+      });
+      renderAdvances();
+      updateSummaryAndReceipt();
+    }
+
+    function removeAdvance(id) {
+      state.advances = state.advances.filter(a => a.id !== id);
+      renderAdvances();
+      updateSummaryAndReceipt();
+    }
+
+    function onFieldChange() {
+      state.commissionPct = parseNum(document.getElementById('commissionPct').value);
+      state.dailyRate = parseNum(document.getElementById('dailyRate').value);
+      state.includeLoadingDay = Boolean(document.getElementById('includeLoadingDay').checked);
+      updateSummaryAndReceipt();
+    }
+
+    // Cálculo consolidado da viagem
+    function computeTotals() {
+      let totalWeight = 0;
+      let totalFreight = 0;
+
+      state.freights.forEach(f => {
+        const w = parseNum(f.weight);
+        totalWeight += w;
+        if (f.autoPerTon) {
+          totalFreight += w * (parseNum(f.ratePerTon) || 300);
+        } else {
+          totalFreight += parseNum(f.grossValue);
+        }
+      });
+
+      const baseDays = calculateDaysBetween(state.dailyStartDate, state.dailyEndDate);
+      const loadingBonus = (state.includeLoadingDay && baseDays > 0) ? 1 : 0;
+      const effectiveDays = baseDays + loadingBonus;
+      state.dailyDays = effectiveDays;
+
+      const commissionVal = totalFreight * (parseNum(state.commissionPct) / 100);
+      const dailyTotal = effectiveDays * parseNum(state.dailyRate);
+      const totalDriver = commissionVal + dailyTotal;
+
+      const fuelMetrics = computeFuelingsMetrics(state.fuelings, state.tripStartKm);
+
+      let driverReimbursableExpenses = 0;
+      let companyPaidExpenses = 0;
+
+      state.expenses.forEach(exp => {
+        const val = parseNum(exp.value);
+        if (exp.paidBy === 'company') {
+          companyPaidExpenses += val;
+        } else {
+          driverReimbursableExpenses += val;
+        }
+      });
+
+      const totalExpenses = driverReimbursableExpenses + companyPaidExpenses;
+      const totalAdvances = state.advances.reduce((acc, a) => acc + parseNum(a.value), 0);
+
+      const driverBalance = totalDriver + driverReimbursableExpenses + fuelMetrics.driverFuelings - totalAdvances;
+      const opNetProfit = totalFreight - totalDriver - totalExpenses - fuelMetrics.totalFuelings;
+
+      return {
+        totalWeight,
+        totalFreight,
+        baseDays,
+        loadingBonus,
+        effectiveDays,
+        commissionVal,
+        dailyTotal,
+        totalDriver,
+        fuelMetrics,
+        totalKmDriven: fuelMetrics.totalKmDriven,
+        dieselLiters: fuelMetrics.totalDieselLiters,
+        dieselValue: fuelMetrics.totalDieselValue,
+        dieselAvgUnit: fuelMetrics.dieselAvgUnit,
+        dieselGeneralKmL: fuelMetrics.dieselGeneralKmL,
+        arlaLiters: fuelMetrics.totalArlaLiters,
+        arlaValue: fuelMetrics.totalArlaValue,
+        arlaAvgUnit: fuelMetrics.arlaAvgUnit,
+        arlaGeneralKmL: fuelMetrics.arlaGeneralKmL,
+        driverFuelings: fuelMetrics.driverFuelings,
+        companyFuelings: fuelMetrics.companyFuelings,
+        totalFuelings: fuelMetrics.totalFuelings,
+        driverReimbursableExpenses,
+        companyPaidExpenses,
+        totalExpenses,
+        totalAdvances,
+        driverBalance,
+        opNetProfit
+      };
+    }
+
+    function updateSummaryAndReceipt() {
+      const t = computeTotals();
+      const code = ensureTripCode(state);
+
+      refreshAllFuelingLegsInDom(t.fuelMetrics);
+
+      document.getElementById('totalWeightDisplay').textContent = formatTons(t.totalWeight);
+      document.getElementById('totalFreightDisplay').textContent = formatBRL(t.totalFreight);
+
+      document.getElementById('commissionValueDisplay').textContent = formatBRL(t.commissionVal);
+      document.getElementById('dailyTotalDisplay').textContent = formatBRL(t.dailyTotal);
+
+      const bonusText = t.loadingBonus > 0 ? ` + ${t.loadingBonus} carreg.` : '';
+      document.getElementById('dailyPeriodSummary').textContent =
+        `${t.effectiveDays} dia(s)${t.baseDays > 0 ? ` (${t.baseDays}d${bonusText})` : ''}`;
+
+      document.getElementById('tripKmSpanBadge').textContent = `Rodados: ${formatKm(t.totalKmDriven)}`;
+
+      document.getElementById('dieselTotalKmDriven').textContent = formatKm(t.totalKmDriven);
+      document.getElementById('dieselTotalLitersOut').textContent = formatLiters(t.dieselLiters);
+      document.getElementById('dieselTotalValueOut').textContent = formatBRL(t.dieselValue);
+      document.getElementById('dieselAvgUnitOut').textContent = `${formatUnitPrice(t.dieselAvgUnit)}/L`;
+      document.getElementById('dieselGeneralKmPerLiter').textContent =
+        t.dieselGeneralKmL > 0 ? formatKmPerLiter(t.dieselGeneralKmL) : '— km/L';
+
+      document.getElementById('arlaTotalKmDriven').textContent = formatKm(t.totalKmDriven);
+      document.getElementById('arlaTotalLitersOut').textContent = formatLiters(t.arlaLiters);
+      document.getElementById('arlaTotalValueOut').textContent = formatBRL(t.arlaValue);
+      document.getElementById('arlaAvgUnitOut').textContent = `${formatUnitPrice(t.arlaAvgUnit)}/L`;
+      document.getElementById('arlaGeneralKmPerLiter').textContent =
+        t.arlaGeneralKmL > 0 ? formatKmPerLiter(t.arlaGeneralKmL) : '— km/L';
+
+      document.getElementById('totalFuelingsDisplay').textContent = formatBRL(t.totalFuelings);
+      document.getElementById('driverFuelingsDisplay').textContent = formatBRL(t.driverFuelings);
+      document.getElementById('companyFuelingsDisplay').textContent = formatBRL(t.companyFuelings);
+
+      document.getElementById('driverExpensesDisplay').textContent = formatBRL(t.driverReimbursableExpenses);
+      document.getElementById('companyExpensesDisplay').textContent = formatBRL(t.companyPaidExpenses);
+      document.getElementById('totalExpensesDisplay').textContent = formatBRL(t.totalExpenses);
+      document.getElementById('totalAdvancesDisplay').textContent = formatBRL(t.totalAdvances);
+
+      document.getElementById('summaryCodeBadge').textContent = code;
+      document.getElementById('summaryDriverLabel').textContent = `Motorista: ${state.driverName?.trim() || '—'}`;
+      document.getElementById('summaryGrossFreight').textContent = formatBRL(t.totalFreight);
+      document.getElementById('summaryCommission').textContent = formatBRL(t.commissionVal);
+      document.getElementById('summaryDaysCount').textContent = String(t.effectiveDays);
+      document.getElementById('summaryDaily').textContent = formatBRL(t.dailyTotal);
+      document.getElementById('summaryDriverGross').textContent = formatBRL(t.totalDriver);
+      document.getElementById('summaryDriverExpenses').textContent = `+ ${formatBRL(t.driverReimbursableExpenses)}`;
+      document.getElementById('summaryDriverFuelings').textContent = `+ ${formatBRL(t.driverFuelings)}`;
+      document.getElementById('summaryAdvances').textContent = `- ${formatBRL(t.totalAdvances)}`;
+      document.getElementById('summaryDieselAvgKmL').textContent =
+        t.dieselGeneralKmL > 0 ? formatKmPerLiter(t.dieselGeneralKmL) : '— km/L';
+      document.getElementById('summaryArlaAvgKmL').textContent =
+        t.arlaGeneralKmL > 0 ? formatKmPerLiter(t.arlaGeneralKmL) : '— km/L';
+      document.getElementById('summaryTotalFuelings').textContent = formatBRL(t.totalFuelings);
+      document.getElementById('summaryTotalExpenses').textContent = formatBRL(t.totalExpenses);
+
+      const balanceBox = document.getElementById('driverBalanceBox');
+      const balanceLabel = document.getElementById('driverBalanceLabel');
+      const balanceStatus = document.getElementById('driverBalanceStatus');
+      const balanceValue = document.getElementById('summaryDriverBalance');
+
+      if (t.driverBalance >= 0) {
+        balanceBox.className = 'mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200';
+        balanceLabel.className = 'text-xs font-bold uppercase tracking-wider text-emerald-900';
+        balanceLabel.textContent = 'Saldo a Pagar ao Motorista';
+        balanceStatus.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900';
+        balanceStatus.textContent = 'A Receber';
+        balanceValue.className = 'text-2xl font-extrabold text-emerald-800 mt-1';
+        balanceValue.textContent = formatBRL(t.driverBalance);
+      } else {
+        balanceBox.className = 'mt-4 p-4 rounded-xl bg-rose-50 border border-rose-200';
+        balanceLabel.className = 'text-xs font-bold uppercase tracking-wider text-rose-900';
+        balanceLabel.textContent = 'Saldo a Devolver pelo Motorista';
+        balanceStatus.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-200/80 text-rose-900';
+        balanceStatus.textContent = 'A Devolver';
+        balanceValue.className = 'text-2xl font-extrabold text-rose-800 mt-1';
+        balanceValue.textContent = formatBRL(Math.abs(t.driverBalance));
+      }
+
+      const opProfitEl = document.getElementById('summaryOpProfit');
+      opProfitEl.textContent = formatBRL(t.opNetProfit);
+      opProfitEl.className = `text-lg font-extrabold ${t.opNetProfit >= 0 ? 'text-slate-900' : 'text-rose-600'}`;
+
+      // Resumos compactos das seções recolhidas
+      const cConj = document.getElementById('compact-conjunto');
+      if (cConj) {
+        cConj.textContent = `${code}${state.driverName?.trim() ? ' • ' + state.driverName.trim() : ''}`;
+      }
+      const cFre = document.getElementById('compact-freights');
+      if (cFre) {
+        cFre.textContent = `${formatTons(t.totalWeight)} • ${formatBRL(t.totalFreight)}`;
+      }
+      const cCom = document.getElementById('compact-commission');
+      if (cCom) {
+        cCom.textContent = `${t.effectiveDays} dia(s) • ${formatBRL(t.totalDriver)}`;
+      }
+      const cFue = document.getElementById('compact-fuelings');
+      if (cFue) {
+        const kmSuffix = t.totalKmDriven > 0 ? ` • ${formatKm(t.totalKmDriven)}` : '';
+        cFue.textContent = `${formatLiters(t.dieselLiters + t.arlaLiters)} • ${formatBRL(t.totalFuelings)}${kmSuffix}`;
+      }
+      const cExp = document.getElementById('compact-expenses');
+      if (cExp) {
+        cExp.textContent = formatBRL(t.totalExpenses);
+      }
+      const cAdv = document.getElementById('compact-advances');
+      if (cAdv) {
+        cAdv.textContent = formatBRL(t.totalAdvances);
+      }
+      const cSum = document.getElementById('compact-summary');
+      if (cSum) {
+        cSum.textContent = formatBRL(t.driverBalance);
+      }
+
+      document.getElementById('receiptPreview').textContent = buildReceiptText(t, code);
+      updateHistoryBadge();
+    }
+
+    function buildReceiptText(t, code) {
+      const lines = [
+        `ACERTO DE VIAGEM — ${code}`,
+        `Motorista: ${state.driverName?.trim() || 'Não informado'}`,
+        `Conjunto: Cavalo ${state.truckPlate || '—'} | Carreta ${state.trailerPlate || '—'}`,
+        `----------------------------------------`,
+        `CARGAS:`
+      ];
+
+      state.freights.forEach((f, idx) => {
+        const w = parseNum(f.weight);
+        const val = f.autoPerTon ? w * (parseNum(f.ratePerTon) || 300) : parseNum(f.grossValue);
+        lines.push(`#${idx + 1} ${f.label || 'Carga'} (${f.client || '—'}): ${w ? formatTons(w) + ' • ' : ''}${formatBRL(val)}`);
+      });
+
+      lines.push(`Faturamento Bruto: ${formatBRL(t.totalFreight)}`);
+      lines.push(`----------------------------------------`);
+      lines.push(`Comissão (${parseNum(state.commissionPct)}%): ${formatBRL(t.commissionVal)}`);
+      lines.push(`Diárias (${t.effectiveDays}d x ${formatBRL(parseNum(state.dailyRate))}): ${formatBRL(t.dailyTotal)}`);
+      lines.push(`Ganho Motorista: ${formatBRL(t.totalDriver)}`);
+      lines.push(`----------------------------------------`);
+      lines.push(`KM Rodados Total: ${formatKm(t.totalKmDriven)}`);
+      lines.push(`Diesel: ${formatLiters(t.dieselLiters)} | Média Geral: ${t.dieselGeneralKmL > 0 ? formatKmPerLiter(t.dieselGeneralKmL) : '— km/L'} | ${formatBRL(t.dieselValue)}`);
+      lines.push(`Arla 32: ${formatLiters(t.arlaLiters)} | Média Geral: ${t.arlaGeneralKmL > 0 ? formatKmPerLiter(t.arlaGeneralKmL) : '— km/L'} | ${formatBRL(t.arlaValue)}`);
+      lines.push(`Total Abastecimentos: ${formatBRL(t.totalFuelings)} (Mot: ${formatBRL(t.driverFuelings)} | Emp: ${formatBRL(t.companyFuelings)})`);
+      lines.push(`----------------------------------------`);
+      lines.push(`Despesas Pagas p/ Motorista: +${formatBRL(t.driverReimbursableExpenses)}`);
+      lines.push(`Despesas Pagas p/ Empresa: ${formatBRL(t.companyPaidExpenses)}`);
+      lines.push(`Adiantamentos/Vales: -${formatBRL(t.totalAdvances)}`);
+      lines.push(`----------------------------------------`);
+      lines.push(
+        t.driverBalance >= 0
+          ? `SALDO A PAGAR MOTORISTA: ${formatBRL(t.driverBalance)}`
+          : `SALDO A DEVOLVER MOTORISTA: ${formatBRL(Math.abs(t.driverBalance))}`
+      );
+      lines.push(`RESULTADO OPERACIONAL: ${formatBRL(t.opNetProfit)}`);
+
+      return lines.join('\n');
+    }
+
+    function copyTextToClipboard(text, successMsg) {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast(successMsg, '📋');
+      } catch (e) {
+        showToast('Não foi possível copiar automaticamente', '⚠️');
+      }
+    }
+
+    function copyReceiptText() {
+      const t = computeTotals();
+      const code = ensureTripCode(state);
+      copyTextToClipboard(buildReceiptText(t, code), 'Resumo copiado!');
+    }
+
+    // Salva no Firebase Firestore (e atualiza cache local)
+    async function saveCurrentSettlement() {
+      try {
+        const t = computeTotals();
+        const code = ensureTripCode(state);
+        if (!state.id) {
+          state.id = uid();
+        }
+        const docId = sanitizeDocId(code);
+        const snapshot = JSON.parse(JSON.stringify(state));
+        snapshot.tripCode = code;
+        snapshot._docId = docId;
+        snapshot.updatedAt = new Date().toISOString();
+        snapshot.summaryTotals = {
+          totalFreight: t.totalFreight,
+          driverBalance: t.driverBalance,
+          opNetProfit: t.opNetProfit
+        };
+
+        const existingIdx = savedHistory.findIndex(
+          item => item.id === snapshot.id || sanitizeDocId(item.tripCode) === docId
+        );
+        if (existingIdx >= 0) {
+          savedHistory[existingIdx] = snapshot;
+        } else {
+          savedHistory.unshift(snapshot);
+        }
+        savedHistory = normalizeHistoryList(savedHistory);
+        writeLocalCache(savedHistory);
+        updateHistoryBadge();
+        refreshRegisteredDriversDatalist();
+        checkDuplicateTripCode();
+
+        if (firestoreReady && db) {
+          await db.collection(FIRESTORE_COLLECTION).doc(docId).set({
+            id: snapshot.id,
+            tripCode: code,
+            driverName: snapshot.driverName || "",
+            truckPlate: snapshot.truckPlate || "",
+            trailerPlate: snapshot.trailerPlate || "",
+            updatedAt: snapshot.updatedAt,
+            summaryTotals: snapshot.summaryTotals,
+            payload: snapshot
+          }, { merge: true });
+          showToast(`Acerto ${code} salvo no Firestore!`, "☁️");
+        } else {
+          showToast(`Acerto ${code} salvo (cache local)`, "💾");
+        }
+      } catch (err) {
+        showToast("Erro ao salvar no Firestore", "⚠️");
+      }
+    }
+
+    function updateHistoryBadge() {
+      const badge = document.getElementById('historyCountBadge');
+      if (badge) badge.textContent = String(savedHistory.length);
+    }
+
+    async function openHistoryModal() {
+      const modal = document.getElementById('historyModal');
+      const list = document.getElementById('historyListContainer');
+      const footerInfo = document.getElementById('historyFooterInfo');
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+
+      list.innerHTML = `
+        <div class="text-center py-8 text-slate-500 text-xs font-medium">
+          Carregando acertos...
+        </div>
+      `;
+
+      await refreshHistoryFromCloud(false);
+      footerInfo.textContent = `${savedHistory.length} acerto(s) salvo(s)`;
+
+      if (savedHistory.length === 0) {
+        list.innerHTML = `
+          <div class="text-center py-10 text-slate-400">
+            <p class="text-3xl mb-2">📂</p>
+            <p class="text-sm font-semibold text-slate-600">Nenhum acerto salvo ainda</p>
+            <p class="text-xs mt-1">Clique em <strong>Salvar</strong> para gravar no Firestore.</p>
+          </div>
+        `;
+      } else {
+        list.innerHTML = savedHistory.map(item => {
+          const tot = item.summaryTotals || { totalFreight: 0, driverBalance: 0, opNetProfit: 0 };
+          const dateLabel = item.updatedAt
+            ? new Date(item.updatedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+            : '';
+          return `
+            <div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white transition flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-mono text-xs font-extrabold px-2 py-0.5 rounded bg-blue-100 text-blue-800">${escapeHtml(item.tripCode || 'SEM-COD')}</span>
+                  <span class="text-sm font-bold text-slate-800 truncate">${escapeHtml(item.driverName || 'Sem motorista')}</span>
+                  <span class="text-xs text-slate-400">${dateLabel}</span>
+                </div>
+                <div class="mt-1.5 flex flex-wrap gap-3 text-xs text-slate-600">
+                  <span>Frete: <strong>${formatBRL(tot.totalFreight)}</strong></span>
+                  <span>Saldo Motorista: <strong class="${tot.driverBalance >= 0 ? 'text-emerald-700' : 'text-rose-600'}">${formatBRL(tot.driverBalance)}</strong></span>
+                  <span>Líquido: <strong>${formatBRL(tot.opNetProfit)}</strong></span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <button type="button" onclick="loadHistoryItem('${item.id}')" class="btn-primary px-3 py-1.5 text-xs">
+                  Abrir
+                </button>
+                <button type="button" onclick="deleteHistoryItem('${item.id}')" class="btn-danger-ghost px-2.5 py-1.5 text-xs font-bold">
+                  Excluir
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function closeHistoryModal() {
+      const modal = document.getElementById('historyModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function loadHistoryItem(id) {
+      const found = savedHistory.find(item => item.id === id);
+      if (!found) return;
+      const cloned = JSON.parse(JSON.stringify(found));
+      delete cloned._docId;
+      delete cloned.summaryTotals;
+      delete cloned.updatedAt;
+      state = cloned;
+      syncStateToInputs();
+      closeHistoryModal();
+      showToast(`Acerto ${ensureTripCode(state)} carregado`, '📂');
+    }
+
+    async function deleteHistoryItem(id) {
+      const target = savedHistory.find(item => item.id === id);
+      savedHistory = savedHistory.filter(item => item.id !== id);
+      writeLocalCache(savedHistory);
+      updateHistoryBadge();
+      refreshRegisteredDriversDatalist();
+      checkDuplicateTripCode();
+
+      if (firestoreReady && db && target) {
+        try {
+          const docId = target._docId || sanitizeDocId(target.tripCode);
+          await db.collection(FIRESTORE_COLLECTION).doc(docId).delete();
+        } catch (e) {
+          showToast('Removido localmente; falha ao excluir na nuvem', '⚠️');
+        }
+      }
+
+      openHistoryModal();
+      showToast('Registro removido', '🗑️');
+    }
+
+    function clearFormNewSettlement() {
+      state = createInitialState();
+      syncStateToInputs();
+      resetSectionsToInitialFocus();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      showToast('Novo acerto iniciado', '✨');
+    }
+
+    function syncStateToInputs() {
+      ensureTripCode(state);
+      refreshRegisteredDriversDatalist();
+      document.getElementById('tripCodeInput').value = state.tripCode;
+      document.getElementById('driverName').value = state.driverName || '';
+      document.getElementById('truckPlate').value = state.truckPlate || '';
+      document.getElementById('trailerPlate').value = state.trailerPlate || '';
+      document.getElementById('commissionPct').value = state.commissionPct ?? 12;
+      document.getElementById('dailyRate').value = state.dailyRate ?? 150;
+      document.getElementById('dailyStartDate').value = state.dailyStartDate || '';
+      document.getElementById('dailyEndDate').value = state.dailyEndDate || '';
+      document.getElementById('includeLoadingDay').checked = Boolean(state.includeLoadingDay);
+      document.getElementById('tripStartKmInput').value = state.tripStartKm || '';
+
+      renderFreights();
+      renderFuelings();
+      renderExpenses();
+      renderAdvances();
+      checkDuplicateTripCode();
+      updateSummaryAndReceipt();
+    }
+
+    // Exportação para Excel (.xlsx) via SheetJS
+    function exportToExcel() {
+      const t = computeTotals();
+      const code = ensureTripCode(state);
+      try {
+        if (typeof XLSX === 'undefined') {
+          showToast('Biblioteca Excel não carregada', '⚠️');
+          return;
+        }
+
+        const fuelingRows = [];
+        (state.fuelings || []).forEach((fuel, idx) => {
+          const leg = (t.fuelMetrics && t.fuelMetrics.legMetrics && t.fuelMetrics.legMetrics[idx]) || {};
+          const payerLabel = fuel.paidBy === 'driver' ? 'Motorista' : 'Empresa';
+          const kmNum = hasNumericValue(fuel.km) ? parseNum(fuel.km) : '';
+          const deltaNum = (leg.deltaKm !== null && leg.deltaKm !== undefined) ? leg.deltaKm : '';
+          const dAvgNum = (leg.dieselKmPerLiter && leg.dieselKmPerLiter > 0) ? Number(leg.dieselKmPerLiter.toFixed(2)) : '';
+          const aAvgNum = (leg.arlaKmPerLiter && leg.arlaKmPerLiter > 0) ? Number(leg.arlaKmPerLiter.toFixed(2)) : '';
+          const dEval = evaluateFuelSubItem(fuel.diesel);
+          const aEval = evaluateFuelSubItem(fuel.arla32);
+
+          if (dEval.totalValue > 0 || dEval.liters > 0 || kmNum !== '') {
+            fuelingRows.push([
+              `Abast. #${idx + 1}`,
+              'Diesel',
+              fuel.station || '',
+              kmNum,
+              deltaNum,
+              dAvgNum,
+              dEval.liters,
+              dEval.liters > 0 ? Number(dEval.pricePerLiter.toFixed(4)) : 0,
+              dEval.totalValue,
+              payerLabel
+            ]);
+          }
+          if (aEval.totalValue > 0 || aEval.liters > 0) {
+            fuelingRows.push([
+              `Abast. #${idx + 1}`,
+              'Arla 32',
+              fuel.station || '',
+              kmNum,
+              deltaNum,
+              aAvgNum,
+              aEval.liters,
+              aEval.liters > 0 ? Number(aEval.pricePerLiter.toFixed(4)) : 0,
+              aEval.totalValue,
+              payerLabel
+            ]);
+          }
+        });
+
+        const rows = [
+          ['Acerto de Viagem', code],
+          ['Motorista', state.driverName || ''],
+          ['Cavalo', state.truckPlate || ''],
+          ['Carreta', state.trailerPlate || ''],
+          ['KM Inicial Viagem', hasNumericValue(state.tripStartKm) ? parseNum(state.tripStartKm) : ''],
+          ['Total KM Rodados', t.totalKmDriven],
+          [],
+          ['Faturamento', 'Cliente', 'Peso (t)', 'Valor Bruto', 'Início', 'Fim'],
+          ...state.freights.map(f => {
+            const val = f.autoPerTon ? parseNum(f.weight) * (parseNum(f.ratePerTon) || 300) : parseNum(f.grossValue);
+            return [f.label, f.client || '', parseNum(f.weight), val, f.startDate || '', f.endDate || ''];
+          }),
+          ['Total Faturamento', '', t.totalWeight, t.totalFreight],
+          [],
+          ['Motorista', 'Qtd/Pct', 'Unitário', 'Total'],
+          ['Comissão', `${parseNum(state.commissionPct)}%`, t.totalFreight, t.commissionVal],
+          ['Diárias', t.effectiveDays, parseNum(state.dailyRate), t.dailyTotal],
+          ['Total Motorista', '', '', t.totalDriver],
+          [],
+          ['Abastecimentos', 'Item', 'Posto', 'KM Abast.', 'KM Trecho', 'Média (km/L)', 'Litros (L)', 'Valor Litro (R$/L)', 'Valor Total (R$)', 'Pago Por'],
+          ...fuelingRows,
+          ['Consolidado Diesel', '', '', '', t.totalKmDriven, t.dieselGeneralKmL > 0 ? Number(t.dieselGeneralKmL.toFixed(2)) : 0, t.dieselLiters, t.dieselAvgUnit, t.dieselValue, ''],
+          ['Consolidado Arla 32', '', '', '', t.totalKmDriven, t.arlaGeneralKmL > 0 ? Number(t.arlaGeneralKmL.toFixed(2)) : 0, t.arlaLiters, t.arlaAvgUnit, t.arlaValue, ''],
+          ['Total Abastecimentos', '', '', '', '', '', t.dieselLiters + t.arlaLiters, '', t.totalFuelings, ''],
+          [],
+          ['Despesas', 'Detalhe', 'Pago Por', 'Valor'],
+          ...state.expenses.map(e => [
+            e.item || '',
+            e.detail || '',
+            e.paidBy === 'company' ? 'Empresa' : 'Motorista',
+            parseNum(e.value)
+          ]),
+          ['Total Despesas', '', '', t.totalExpenses],
+          ['Despesas (Motorista)', '', '', t.driverReimbursableExpenses],
+          ['Despesas (Empresa)', '', '', t.companyPaidExpenses],
+          [],
+          ['Adiantamentos', 'Data', 'Descrição', 'Valor'],
+          ...state.advances.map(a => ['Vale', a.date || '', a.desc || '', parseNum(a.value)]),
+          ['Total Adiantamentos', '', '', t.totalAdvances],
+          [],
+          ['Resumo Final', '', '', 'Valor'],
+          ['Adiantamentos', '', '', -t.totalAdvances],
+          ['Abastecimentos (Motorista)', '', '', t.driverFuelings],
+          ['Despesas (Motorista)', '', '', t.driverReimbursableExpenses],
+          ['Motorista', '', '', t.totalDriver],
+          ['Saldo do Motorista', '', '', t.driverBalance],
+          ['Resultado Operacional', '', '', t.opNetProfit]
+        ];
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Acerto');
+        XLSX.writeFile(wb, `${code}.xlsx`);
+        showToast(`Planilha ${code}.xlsx gerada!`, '📊');
+      } catch (err) {
+        showToast('Erro ao gerar Excel', '⚠️');
+      }
+    }
+
+    // Expande todas as seções automaticamente antes de imprimir/salvar em PDF
+    let prePrintOpenMap = null;
+    window.addEventListener('beforeprint', () => {
+      prePrintOpenMap = { ...sectionOpenMap };
+      SECTION_IDS.forEach(id => {
+        const bodyEl = document.getElementById(`body-${id}`);
+        if (bodyEl) bodyEl.classList.remove('hidden');
+      });
+    });
+
+    window.addEventListener('afterprint', () => {
+      if (prePrintOpenMap) {
+        sectionOpenMap = { ...prePrintOpenMap };
+        prePrintOpenMap = null;
+      }
+      applySectionVisibility();
+    });
+
+    window.addEventListener('scroll', updateCompactHeader, { passive: true });
+    window.addEventListener('DOMContentLoaded', () => {
+      syncStateToInputs();
+      applySectionVisibility();
+      updateCompactHeader();
+      initFirebaseFirestore();
+    });
+  </script>
+</body>
+</html>
